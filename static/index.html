@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FitnessOS | Set logger</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <span class="eyebrow">FitnessOS · local build</span>
+        <h1>Log one set</h1>
+        <p>Save a strength set and find it in your history. Records stay on this computer until you export a backup.</p>
+      </header>
+
+      <section class="card" aria-labelledby="entry-heading">
+        <h2 id="entry-heading">New set</h2>
+        <form id="set-form">
+          <label for="activity-date">Workout date</label>
+          <input id="activity-date" name="activity_date" type="date" required>
+
+          <label for="exercise">Exercise</label>
+          <input id="exercise" name="exercise" type="text" maxlength="80" placeholder="e.g. Goblet squat" autocomplete="off" required>
+
+          <div class="pair">
+            <div>
+              <label for="reps">Reps</label>
+              <input id="reps" name="reps" type="number" min="1" max="1000" step="1" inputmode="numeric" required>
+            </div>
+            <div>
+              <label for="load">Load <small>(blank = unknown)</small></label>
+              <input id="load" name="load" type="number" min="0" max="10000" step="any" inputmode="decimal" placeholder="Optional">
+            </div>
+          </div>
+
+          <div class="pair">
+            <div>
+              <label for="unit">Unit</label>
+              <select id="unit" name="unit"><option value="kg">kg</option><option value="lb">lb</option></select>
+            </div>
+            <div>
+              <label for="load-type">Load means</label>
+              <select id="load-type" name="load_type"><option value="total">Total</option><option value="per_hand">Per hand</option></select>
+            </div>
+          </div>
+
+          <button id="save-button" type="submit">Save set</button>
+          <p id="save-status" class="status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="history" aria-labelledby="history-heading">
+        <div class="history-heading"><h2 id="history-heading">Saved history</h2><button id="refresh-button" class="text-button" type="button">Refresh</button></div>
+        <p id="history-status" class="muted" role="status"></p>
+        <ul id="history-list" class="history-list"></ul>
+      </section>
+
+      <section class="backup card" aria-labelledby="backup-heading">
+        <h2 id="backup-heading">Backup and restore</h2>
+        <p>Download a JSON copy of every set. Keep it somewhere safe. Restore accepts a backup only when this app has no sets, so existing records cannot be replaced by accident.</p>
+        <button id="export-button" class="secondary-button" type="button">Download backup</button>
+        <label for="backup-file">Restore from a backup file</label>
+        <input id="backup-file" type="file" accept=".json,application/json">
+        <div class="backup-actions">
+          <button id="preview-button" class="secondary-button" type="button">Preview restore</button>
+          <button id="restore-button" class="danger-button" type="button" disabled>Restore these sets</button>
+        </div>
+        <p id="backup-status" class="status" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+  </body>
+</html>
