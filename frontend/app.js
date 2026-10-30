@@ -6,6 +6,13 @@ const historyList = document.querySelector("#history-list");
 const backupFile = document.querySelector("#backup-file");
 const backupStatus = document.querySelector("#backup-status");
 const restoreButton = document.querySelector("#restore-button");
+const recentList = document.querySelector("#recent-list");
+const recentStatus = document.querySelector("#recent-status");
+const copyRecentValuesButton = document.querySelector("#copy-recent-values");
+const lastSavedCard = document.querySelector("#last-saved");
+const lastSavedDetails = document.querySelector("#last-saved-details");
+let selectedRecentSet = null;
+let lastSavedSet = null;
 let previewedBackup = null;
 
 // Use the user's local calendar date, not UTC, for the date they experienced.
@@ -21,6 +28,66 @@ function showSaveStatus(message, kind = "") {
   saveStatus.className = `status ${kind}`;
 }
 
+function describeSet(set) {
+  const load = set.load === null ? "load unknown" : `${set.load} ${set.unit} ${set.load_type === "per_hand" ? "per hand" : "total"}`;
+  return `${set.reps} reps · ${load}`;
+}
+
+function fillValues(set) {
+  form.elements.reps.value = set.reps;
+  form.elements.load.value = set.load ?? "";
+}
+
+function fillFromSavedSet(set) {
+  form.elements.activity_date.value = set.activity_date;
+  form.elements.exercise.value = set.exercise;
+  form.elements.unit.value = set.unit;
+  form.elements.load_type.value = set.load_type;
+  fillValues(set);
+  selectedRecentSet = null;
+  copyRecentValuesButton.hidden = true;
+  showSaveStatus("Values copied into the form. Review them, then save when ready.");
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+  form.elements.reps.focus({ preventScroll: true });
+}
+
+async function loadRecentExercises() {
+  recentStatus.textContent = "Loading recent exercises…";
+  try {
+    const response = await fetch("/api/recent-exercises", { cache: "no-store" });
+    if (!response.ok) throw new Error("Recent exercises could not be loaded.");
+    const sets = await response.json();
+    recentList.replaceChildren();
+    selectedRecentSet = null;
+    copyRecentValuesButton.hidden = true;
+    for (const set of sets) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "recent-button";
+      const name = document.createElement("strong");
+      name.textContent = set.exercise;
+      const details = document.createElement("span");
+      details.textContent = describeSet(set);
+      button.append(name, details);
+      button.addEventListener("click", () => {
+        form.elements.exercise.value = set.exercise;
+        form.elements.unit.value = set.unit;
+        form.elements.load_type.value = set.load_type;
+        selectedRecentSet = set;
+        copyRecentValuesButton.hidden = false;
+        showSaveStatus(`${set.exercise} selected. Reps and load are unchanged; copy the last values or enter your own.`);
+      });
+      recentList.append(button);
+    }
+    recentStatus.textContent = sets.length ? "Choose an exercise to fill its name and load convention." : "No recent exercises yet. Type a name to begin.";
+  } catch {
+    recentList.replaceChildren();
+    selectedRecentSet = null;
+    copyRecentValuesButton.hidden = true;
+    recentStatus.textContent = "Recent exercises unavailable. Type a name manually.";
+  }
+}
+
 async function loadHistory() {
   historyStatus.textContent = "Loading history…";
   try {
@@ -33,22 +100,13 @@ async function loadHistory() {
       const title = document.createElement("strong");
       const details = document.createElement("span");
       title.textContent = set.exercise;
-      const load = set.load === null ? "load unknown" : `${set.load} ${set.unit} ${set.load_type === "per_hand" ? "per hand" : "total"}`;
-      details.textContent = `${set.activity_date} · ${set.reps} reps · ${load}`;
+      details.textContent = `${set.activity_date} · ${describeSet(set)}`;
       const repeat = document.createElement("button");
       repeat.type = "button";
       repeat.className = "text-button repeat-button";
       repeat.textContent = "Use again";
       repeat.addEventListener("click", () => {
-        form.elements.activity_date.value = set.activity_date;
-        form.elements.exercise.value = set.exercise;
-        form.elements.reps.value = set.reps;
-        form.elements.load.value = set.load ?? "";
-        form.elements.unit.value = set.unit;
-        form.elements.load_type.value = set.load_type;
-        showSaveStatus("Previous values filled in. Review them, then save when ready.");
-        form.scrollIntoView({ behavior: "smooth", block: "start" });
-        form.elements.reps.focus({ preventScroll: true });
+        fillFromSavedSet(set);
       });
       item.append(title, details, repeat);
       historyList.append(item);
@@ -58,6 +116,22 @@ async function loadHistory() {
     historyStatus.textContent = "History could not be loaded. Try Refresh.";
   }
 }
+
+form.elements.exercise.addEventListener("input", () => {
+  selectedRecentSet = null;
+  copyRecentValuesButton.hidden = true;
+});
+
+copyRecentValuesButton.addEventListener("click", () => {
+  if (!selectedRecentSet) return;
+  fillValues(selectedRecentSet);
+  showSaveStatus("Last reps and load copied. Review them, then save when ready.");
+  form.elements.reps.focus();
+});
+
+document.querySelector("#repeat-values").addEventListener("click", () => {
+  if (lastSavedSet) fillFromSavedSet(lastSavedSet);
+});
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -73,20 +147,36 @@ form.addEventListener("submit", async (event) => {
     load_type: fields.get("load_type"),
   };
   try {
-    const response = await fetch("/api/sets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(set),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Save failed. Try again.");
+    let response;
+    try {
+      response = await fetch("/api/sets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(set),
+      });
+    } catch {
+      showSaveStatus("Could not confirm the save. Check history before retrying; your entries are still here.", "error");
+      return;
+    }
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      showSaveStatus("Could not read the save response. Check history before retrying; your entries are still here.", "error");
+      return;
+    }
+    if (!response.ok) {
+      showSaveStatus(`${result.error || "Save failed."} Your entries are still here.`, "error");
+      return;
+    }
+    lastSavedSet = result;
+    lastSavedDetails.textContent = `${result.activity_date} · ${result.exercise} · ${describeSet(result)}`;
+    lastSavedCard.hidden = false;
     showSaveStatus("Saved in this computer's database.", "success");
-    await loadHistory();
     form.elements.reps.value = "";
     form.elements.load.value = "";
+    await Promise.all([loadHistory(), loadRecentExercises()]);
     form.elements.reps.focus();
-  } catch (error) {
-    showSaveStatus(`${error.message} Your entries are still here.`, "error");
   } finally {
     saveButton.disabled = false;
   }
@@ -162,3 +252,4 @@ restoreButton.addEventListener("click", async () => {
 });
 
 loadHistory();
+loadRecentExercises();

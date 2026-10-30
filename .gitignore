@@ -10,6 +10,8 @@ __pycache__/
 *.sqlite
 *.sqlite3
 data/
+/databases/*
+!/databases/README.md
 fitnessos-sets*.json
 
 # Editor and OS files

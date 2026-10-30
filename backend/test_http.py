@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from app import Handler, ROOT
+from backend.app import Handler, ROOT
 
 
 class LocalHttpTests(unittest.TestCase):
@@ -28,6 +28,10 @@ class LocalHttpTests(unittest.TestCase):
     def test_page_save_history_and_export(self):
         with urlopen(self.base + "/") as response:
             self.assertIn(b"Log one set", response.read())
+        with urlopen(self.base + "/app.js") as response:
+            self.assertIn(b"loadRecentExercises", response.read())
+        with urlopen(self.base + "/style.css") as response:
+            self.assertIn(b".recent-list", response.read())
 
         set_data = {
             "activity_date": "2026-10-23",
@@ -50,6 +54,10 @@ class LocalHttpTests(unittest.TestCase):
             history = json.load(response)
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["exercise"], "Goblet squat")
+
+        with urlopen(self.base + "/api/recent-exercises") as response:
+            recent = json.load(response)
+        self.assertEqual([row["exercise"] for row in recent], ["Goblet squat"])
 
         with urlopen(self.base + "/api/export") as response:
             backup = json.load(response)

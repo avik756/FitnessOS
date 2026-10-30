@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app import ROOT, export_sets, list_sets, preview_restore, restore_sets, save_set
+from backend.app import ROOT, export_sets, list_sets, preview_restore, recent_exercises, restore_sets, save_set
 
 
 class SetStorageTests(unittest.TestCase):
@@ -38,6 +38,14 @@ class SetStorageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             save_set(self.example, self.database)
         self.assertEqual(list_sets(self.database), [])
+
+    def test_recent_exercises_use_latest_save_even_for_an_older_activity_date(self):
+        save_set(self.example, self.database)
+        save_set({**self.example, "exercise": "Deadlift", "reps": 5}, self.database)
+        save_set({**self.example, "activity_date": "2026-10-01", "exercise": "goblet squat", "reps": 10}, self.database)
+        recent = recent_exercises(self.database)
+        self.assertEqual([row["exercise"] for row in recent], ["goblet squat", "Deadlift"])
+        self.assertEqual(recent[0]["reps"], 10)
 
     def test_export_restores_into_an_empty_database(self):
         save_set(self.example, self.database)

@@ -1,10 +1,12 @@
 :root { font-family: system-ui, sans-serif; color: #17332c; background: #f3f6f1; }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; }
 .page { width: min(100% - 32px, 680px); margin: 0 auto; padding: 32px 0 64px; }
 .eyebrow { color: #286c55; font-size: .8rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 h1 { font-size: clamp(2rem, 8vw, 3rem); line-height: 1.05; margin: 10px 0; }
 h2 { font-size: 1.25rem; margin: 0 0 20px; }
+h3 { font-size: 1rem; margin: 0 0 10px; }
 header p { color: #52675e; line-height: 1.5; max-width: 52ch; margin-bottom: 28px; }
 .card { background: white; border: 1px solid #dce6de; border-radius: 20px; padding: 24px; box-shadow: 0 12px 32px #17332c0a; }
 label { display: block; font-size: .94rem; font-weight: 650; margin: 16px 0 8px; }
@@ -12,12 +14,20 @@ label small { color: #61766c; font-weight: 400; }
 input, select { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid #b4c8bc; border-radius: 10px; background: white; color: #17332c; font: inherit; }
 input:focus, select:focus, button:focus-visible { outline: 3px solid #75c3a0; outline-offset: 2px; }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.recent-exercises { margin-top: 18px; padding: 16px; border: 1px solid #dce6de; border-radius: 12px; background: #f8faf7; }
+.recent-exercises .muted { margin: 0 0 10px; }
+.recent-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.recent-button { display: grid; gap: 2px; width: 100%; min-height: 48px; padding: 10px 12px; text-align: left; border: 1px solid #b4c8bc; border-radius: 10px; background: white; color: #17332c; }
+.recent-button span { color: #52675e; font-size: .85rem; }
+#copy-recent-values { width: 100%; margin-top: 10px; }
 button { cursor: pointer; font: inherit; }
 #save-button { width: 100%; min-height: 52px; margin-top: 24px; border: 0; border-radius: 12px; background: #176a4b; color: white; font-weight: 700; }
 #save-button:disabled { opacity: .65; cursor: wait; }
 .status { min-height: 1.5em; margin: 12px 0 0; font-size: .9rem; }
 .status.success { color: #176a4b; }
 .status.error { color: #a13728; }
+.last-saved { margin-top: 18px; padding: 16px; border: 1px solid #9acbb0; border-radius: 12px; background: #f1faf4; }
+.last-saved p { margin: 0 0 12px; line-height: 1.4; }
 .history { margin-top: 36px; }
 .history-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
 .history-heading h2 { margin-bottom: 0; }
@@ -34,4 +44,5 @@ button { cursor: pointer; font: inherit; }
 .secondary-button { border: 1px solid #176a4b; background: white; color: #176a4b; }
 .danger-button { border: 0; background: #8d382a; color: white; }
 .danger-button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 500px) { .recent-list { display: flex; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; } .recent-button { flex: 0 0 min(70vw, 210px); scroll-snap-align: start; } }
 @media (max-width: 380px) { .page { width: min(100% - 24px, 680px); } .card { padding: 18px; } .pair { gap: 10px; } }

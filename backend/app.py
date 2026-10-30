@@ -11,9 +11,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-ROOT = Path(__file__).parent
-STATIC = ROOT / "static"
-DATABASE = ROOT / "data" / "fitnessos.sqlite3"
+ROOT = Path(__file__).resolve().parent.parent
+STATIC = ROOT / "frontend"
+DATABASE = ROOT / "databases" / "fitnessos.sqlite3"
 
 
 def connect(database=DATABASE):
@@ -103,6 +103,18 @@ def list_sets(database=DATABASE):
     return [dict(row) for row in rows]
 
 
+def recent_exercises(database=DATABASE):
+    with closing(connect(database)) as connection:
+        rows = connection.execute(
+            """SELECT * FROM sets
+               WHERE id IN (
+                   SELECT MAX(id) FROM sets GROUP BY exercise COLLATE NOCASE
+               )
+               ORDER BY id DESC LIMIT 5"""
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def export_sets(database=DATABASE):
     with closing(connect(database)) as connection:
         rows = connection.execute(
@@ -172,6 +184,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, list_sets(self.server.database))
             except (sqlite3.Error, OSError):
                 self.send_json(500, {"error": "Could not load history. Try again."})
+            return
+
+        if path == "/api/recent-exercises":
+            try:
+                self.send_json(200, recent_exercises(self.server.database))
+            except (sqlite3.Error, OSError):
+                self.send_json(500, {"error": "Could not load recent exercises. Try again."})
             return
 
         if path == "/api/export":

@@ -24,6 +24,13 @@
           <label for="exercise">Exercise</label>
           <input id="exercise" name="exercise" type="text" maxlength="80" placeholder="e.g. Goblet squat" autocomplete="off" required>
 
+          <div class="recent-exercises" aria-labelledby="recent-heading">
+            <h3 id="recent-heading">Recent exercises</h3>
+            <p id="recent-status" class="muted" role="status"></p>
+            <div id="recent-list" class="recent-list"></div>
+            <button id="copy-recent-values" class="secondary-button" type="button" hidden>Copy last reps and load</button>
+          </div>
+
           <div class="pair">
             <div>
               <label for="reps">Reps</label>
@@ -49,6 +56,11 @@
           <button id="save-button" type="submit">Save set</button>
           <p id="save-status" class="status" role="status" aria-live="polite"></p>
         </form>
+        <div id="last-saved" class="last-saved" hidden>
+          <h3>Just saved</h3>
+          <p id="last-saved-details"></p>
+          <button id="repeat-values" class="secondary-button" type="button">Repeat values</button>
+        </div>
       </section>
 
       <section class="history" aria-labelledby="history-heading">
