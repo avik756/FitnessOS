@@ -2,6 +2,8 @@
 
 **Draft for Avik to edit · 30 October 2026.** This is a proposal, not a settled product plan. `AGENTS.md` remains the source of truth for current decisions. The working assumption for this draft is a small, local strength-logging experiment: record several sets with little effort, then find and trust them later.
 
+**5 November update:** The local build now also has account sign-in, navigation, filtered history, favorites, and a recorded-activity progress view. Planned areas are visible as coming-soon pages. The real-phone and hands-on recovery checks below remain open.
+
 ## Starting point
 
 The current app already saves one strength set at a time to SQLite, shows the latest 100 sets, fills the form from a previous set, and exports and restores JSON into an empty database. Its Python HTTP server is bound to this computer. The code lives in `backend/` and `frontend/`, with local records in `databases/`. The README still describes the earlier planning stage. Keep the existing save, export, and restore checks passing as the app grows.
@@ -28,9 +30,11 @@ Finish each milestone as a usable slice: change the code, try the flow in a brow
 
 **Done when:** A previously used exercise can be selected without typing its name, its suggested values are visibly editable, and selecting it alone creates no record. If history cannot load, manual entry still works.
 
-**Learn:** Follow how the browser reads `GET /api/sets`, derives recent choices, and keeps a suggestion separate from a saved set.
+**Learn:** Follow how the browser reads `GET /api/recent-exercises` and keeps a suggestion separate from a saved set.
 
 ### 3. Make history answer a useful question
+
+**Status (5 November):** Exercise filtering and matching counts are implemented and checked in a local browser. Avik's own trial is still pending.
 
 **Build:** Add an exercise filter and a clear date order to saved history. Show the full load meaning (`kg` or `lb`, total or per hand), including unknown versus zero. Show how many records match. Keep the initial view easy to scan on a phone.
 

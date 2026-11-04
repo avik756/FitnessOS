@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from backend.app import ROOT, export_sets, list_sets, preview_restore, recent_exercises, restore_sets, save_set
+from backend.app import (ROOT, create_account, export_sets, get_session, list_favorites,
+                         list_sets, login_account, logout_account, preview_restore,
+                         recent_exercises, restore_sets, save_set, set_favorite)
 
 
 class SetStorageTests(unittest.TestCase):
@@ -49,22 +51,26 @@ class SetStorageTests(unittest.TestCase):
 
     def test_export_restores_into_an_empty_database(self):
         save_set(self.example, self.database)
+        set_favorite({"exercise": "Goblet squat", "favorite": True}, self.database)
         backup = export_sets(self.database)
+        self.assertEqual(backup["version"], 2)
         replacement = Path(self.temp.name) / "replacement.sqlite3"
         preview = preview_restore(backup, replacement)
         self.assertEqual(preview["import_count"], 1)
+        self.assertEqual(preview["favorite_count"], 1)
         self.assertTrue(preview["can_restore"])
         self.assertEqual(restore_sets(backup, replacement), 1)
         restored = list_sets(replacement)[0]
         self.assertEqual(restored["exercise"], "Goblet squat")
         self.assertEqual(restored["load"], "0")
         self.assertEqual(restored["unit"], "kg")
+        self.assertEqual(list_favorites(replacement), ["Goblet squat"])
 
     def test_restore_refuses_to_replace_existing_sets(self):
         save_set(self.example, self.database)
         backup = export_sets(self.database)
         self.assertFalse(preview_restore(backup, self.database)["can_restore"])
-        with self.assertRaisesRegex(ValueError, "empty database"):
+        with self.assertRaisesRegex(ValueError, "empty records"):
             restore_sets(backup, self.database)
         self.assertEqual(len(list_sets(self.database)), 1)
 
@@ -75,6 +81,42 @@ class SetStorageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             restore_sets(backup, self.database)
         self.assertEqual(list_sets(self.database), [])
+
+    def test_version_one_backup_still_restores(self):
+        backup = {"format": "fitnessos-sets", "version": 1, "sets": [self.example]}
+        self.assertEqual(restore_sets(backup, self.database), 1)
+        self.assertEqual(list_favorites(self.database), [])
+
+    def test_favorite_only_backup_restores_without_inventing_sets(self):
+        set_favorite({"exercise": "Goblet squat", "favorite": True}, self.database)
+        backup = export_sets(self.database)
+        replacement = Path(self.temp.name) / "favorites-only.sqlite3"
+        preview = preview_restore(backup, replacement)
+        self.assertEqual((preview["import_count"], preview["favorite_count"]), (0, 1))
+        self.assertIsNone(preview["first_date"])
+        self.assertEqual(restore_sets(backup, replacement), 0)
+        self.assertEqual(list_favorites(replacement), ["Goblet squat"])
+        self.assertEqual(list_sets(replacement), [])
+        with self.assertRaisesRegex(ValueError, "invalid favorite"):
+            restore_sets({"format": "fitnessos-sets", "version": 2, "sets": [self.example]}, replacement)
+
+    def test_account_sessions_and_existing_records(self):
+        save_set(self.example, self.database)
+        name, token, remember = create_account(
+            {"name": "Avik", "password": "correct horse", "remember": False}, self.database)
+        self.assertEqual((name, remember), ("Avik", False))
+        self.assertEqual(get_session(token, self.database)["name"], "Avik")
+        self.assertEqual(len(list_sets(self.database)), 1)
+        with self.assertRaisesRegex(ValueError, "already exists"):
+            create_account({"name": "Other", "password": "long password"}, self.database)
+        with self.assertRaisesRegex(ValueError, "incorrect"):
+            login_account({"name": "Avik", "password": "wrong"}, self.database)
+        _, remembered_token, remembered = login_account(
+            {"name": "avik", "password": "correct horse", "remember": True}, self.database)
+        self.assertTrue(remembered)
+        self.assertEqual(get_session(remembered_token, self.database)["remembered"], 1)
+        logout_account(remembered_token, self.database)
+        self.assertIsNone(get_session(remembered_token, self.database))
 
 
 if __name__ == "__main__":

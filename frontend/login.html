@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FitnessOS | Sign in</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/login.js" defer></script>
+</head>
+<body class="auth-body">
+  <main class="auth-layout">
+    <section class="auth-story">
+      <div class="brand"><span class="brand-mark">F</span><span>FitnessOS<small>Your personal fitness space</small></span></div>
+      <span class="eyebrow">Built around your records</span>
+      <h1>Keep showing up.<br>Keep the story.</h1>
+      <p>Log a set in moments. Return to the details that matter. Your records are stored on this computer.</p>
+      <div class="auth-story-foot">Strength logging today. More ways to move are on the horizon.</div>
+    </section>
+    <section class="auth-panel">
+      <div class="auth-card">
+        <span class="eyebrow">Welcome</span>
+        <h2 id="auth-title">Checking your space…</h2>
+        <p id="auth-intro" class="muted">One moment.</p>
+        <form id="auth-form" hidden>
+          <label for="auth-name">Name</label>
+          <input id="auth-name" name="name" type="text" autocomplete="username" maxlength="50" required>
+          <label for="auth-password">Password</label>
+          <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="8" required>
+          <label class="checkbox-row" for="remember-me"><input id="remember-me" name="remember" type="checkbox"><span>Remember me on this browser for 30 days</span></label>
+          <button id="auth-button" class="primary-button" type="submit">Sign in</button>
+          <p id="auth-status" class="status" role="status" aria-live="polite"></p>
+        </form>
+        <p class="auth-note">This is a local account for this computer. The password does not encrypt the database or create a cloud account.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

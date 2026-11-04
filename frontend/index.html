@@ -1,86 +1,83 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>FitnessOS | Set logger</title>
-    <link rel="stylesheet" href="/style.css">
-    <script src="/app.js" defer></script>
-  </head>
-  <body>
-    <main class="page">
-      <header>
-        <span class="eyebrow">FitnessOS · local build</span>
-        <h1>Log one set</h1>
-        <p>Save a strength set and find it in your history. Records stay on this computer until you export a backup.</p>
-      </header>
-
-      <section class="card" aria-labelledby="entry-heading">
-        <h2 id="entry-heading">New set</h2>
-        <form id="set-form">
-          <label for="activity-date">Workout date</label>
-          <input id="activity-date" name="activity_date" type="date" required>
-
-          <label for="exercise">Exercise</label>
-          <input id="exercise" name="exercise" type="text" maxlength="80" placeholder="e.g. Goblet squat" autocomplete="off" required>
-
-          <div class="recent-exercises" aria-labelledby="recent-heading">
-            <h3 id="recent-heading">Recent exercises</h3>
-            <p id="recent-status" class="muted" role="status"></p>
-            <div id="recent-list" class="recent-list"></div>
-            <button id="copy-recent-values" class="secondary-button" type="button" hidden>Copy last reps and load</button>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FitnessOS | Your space</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">F</span><span>FitnessOS<small>Personal fitness space</small></span></div>
+      <p class="nav-label">Your space</p>
+      <nav class="side-nav" aria-label="Main navigation">
+        <a href="#home" data-nav="home">Overview</a><a href="#log" data-nav="log">Log a set</a><a href="#history" data-nav="history">History</a>
+        <a href="#exercises" data-nav="exercises">Exercises</a><a href="#progress" data-nav="progress">Progress</a><a href="#backup" data-nav="backup">Backup</a>
+      </nav>
+      <p class="nav-label later-label">On the horizon</p>
+      <nav class="side-nav" aria-label="Planned features">
+        <a href="#coming/plans">Workout plans</a><a href="#coming/cardio">Cardio &amp; sports</a><a href="#coming/nutrition">Meals &amp; nutrition</a>
+        <a href="#coming/reminders">Reminders</a><a href="#coming/voice">Voice entry</a><a href="#coming/measurements">Measurements</a><a href="#coming/wearables">Wearables</a>
+      </nav>
+      <button class="logout-button" data-logout type="button">Sign out</button>
+    </aside>
+    <div class="main-column">
+      <header class="topbar"><div class="mobile-brand">FitnessOS</div><span class="topbar-account">Signed in as <strong id="account-name">you</strong></span><button class="topbar-signout" data-logout type="button">Sign out</button></header>
+      <main class="page">
+        <section id="view-home" data-view="home" class="view">
+          <div class="page-heading"><span class="eyebrow">Your space</span><h1>Move, record, return.</h1><p>Your strength records at a glance. Every saved set stays on this computer until you export a backup.</p></div>
+          <div class="stat-grid"><div class="stat-card"><span>Sets logged</span><strong id="total-sets">—</strong></div><div class="stat-card"><span>Days with records</span><strong id="active-days">—</strong></div></div>
+          <div class="home-grid">
+            <section class="card"><div class="section-head"><h2>Pick up where you left off</h2><a class="inline-link" href="#log">Log a set</a></div><p id="overview-status" class="muted" role="status"></p><ul id="overview-list" class="compact-list"></ul></section>
+            <section class="card prompt-card"><span class="eyebrow">Quick start</span><h2>Ready for the next set?</h2><p>Use a recent exercise, review the values, and save only what you actually did.</p><a class="primary-link" href="#log">Open set logger</a></section>
           </div>
-
-          <div class="pair">
-            <div>
-              <label for="reps">Reps</label>
-              <input id="reps" name="reps" type="number" min="1" max="1000" step="1" inputmode="numeric" required>
-            </div>
-            <div>
-              <label for="load">Load <small>(blank = unknown)</small></label>
-              <input id="load" name="load" type="number" min="0" max="10000" step="any" inputmode="decimal" placeholder="Optional">
-            </div>
+        </section>
+        <section id="view-log" data-view="log" class="view" hidden>
+          <div class="page-heading"><span class="eyebrow">Strength</span><h1>Log a set</h1><p>One clear save at a time. Your draft stays in the form if the request fails.</p></div>
+          <section class="card entry-card" aria-labelledby="entry-heading"><h2 id="entry-heading">New set</h2>
+            <form id="set-form">
+              <label for="activity-date">Activity date</label><input id="activity-date" name="activity_date" type="date" required>
+              <label for="exercise">Exercise</label><input id="exercise" name="exercise" type="text" maxlength="80" placeholder="e.g. Goblet squat" autocomplete="off" required>
+              <div class="recent-exercises" aria-labelledby="recent-heading"><h3 id="recent-heading">Recent exercises</h3><p id="recent-status" class="muted" role="status"></p><div id="recent-list" class="recent-list"></div><button id="copy-recent-values" class="secondary-button" type="button" hidden>Copy last reps and load</button></div>
+              <div class="favorite-shortcuts"><h3>Favorites</h3><div id="favorite-shortcuts" class="chip-list"></div></div>
+              <div class="pair"><div><label for="reps">Reps</label><input id="reps" name="reps" type="number" min="1" max="1000" step="1" inputmode="numeric" required></div><div><label for="load">Load <small>(blank = unknown)</small></label><input id="load" name="load" type="number" min="0" max="10000" step="any" inputmode="decimal" placeholder="Optional"></div></div>
+              <div class="pair"><div><label for="unit">Unit</label><select id="unit" name="unit"><option value="kg">kg</option><option value="lb">lb</option></select></div><div><label for="load-type">Load means</label><select id="load-type" name="load_type"><option value="total">Total</option><option value="per_hand">Per hand</option></select></div></div>
+              <button id="save-button" class="primary-button" type="submit">Save set</button><p id="save-status" class="status" role="status" aria-live="polite"></p>
+            </form>
+            <div id="last-saved" class="last-saved" hidden><h3>Just saved</h3><p id="last-saved-details"></p><button id="repeat-values" class="secondary-button" type="button">Repeat values</button></div>
+          </section>
+        </section>
+        <section id="view-history" data-view="history" class="view" hidden>
+          <div class="page-heading"><span class="eyebrow">Records</span><h1>History</h1><p>Find the sets you logged. Each row keeps its activity date and load meaning.</p></div>
+          <section class="card"><div class="section-head"><h2>Saved sets</h2><button id="refresh-button" class="text-button" type="button">Refresh</button></div><label for="history-filter">Exercise</label><select id="history-filter"><option value="">All recent sets</option></select><p id="history-status" class="muted" role="status"></p><ul id="history-list" class="history-list"></ul></section>
+        </section>
+        <section id="view-exercises" data-view="exercises" class="view" hidden>
+          <div class="page-heading"><span class="eyebrow">Library</span><h1>Exercises</h1><p>Keep your most used exercises close. Favorites are saved in this computer's database.</p></div>
+          <section class="card"><h2>Favorites</h2><p id="favorites-status" class="muted" role="status"></p><div id="favorites-list" class="exercise-grid"></div></section>
+          <section class="card stacked-card"><h2>All logged exercises</h2><p id="exercises-status" class="muted" role="status"></p><div id="all-exercises-list" class="exercise-grid"></div></section>
+        </section>
+        <section id="view-progress" data-view="progress" class="view" hidden>
+          <div class="page-heading"><span class="eyebrow">Review</span><h1>Progress</h1><p>See what you recorded over time. These are logging patterns, not a measure of fitness improvement.</p></div>
+          <section class="card"><label for="progress-exercise">Choose an exercise</label><select id="progress-exercise"><option value="">Select an exercise</option></select><p id="progress-status" class="muted" role="status"></p><div id="progress-summary" class="stat-grid small-stats"></div><div id="progress-chart" class="progress-chart" aria-label="Logged set count by activity date"></div><h2 class="subheading">Recent records</h2><ul id="progress-list" class="compact-list"></ul></section>
+        </section>
+        <section id="view-backup" data-view="backup" class="view" hidden>
+          <div class="page-heading"><span class="eyebrow">Your data</span><h1>Backup &amp; restore</h1><p>Export your records before relying on this local app for meaningful personal data.</p></div>
+          <section class="card backup" aria-labelledby="backup-heading"><h2 id="backup-heading">Download and restore</h2><p>Download a JSON copy of every set and favorite exercise. Restore previews the file and accepts it only when this database has no sets or favorites.</p><button id="export-button" class="secondary-button" type="button">Download backup</button><label for="backup-file">Restore from a backup file</label><input id="backup-file" type="file" accept=".json,application/json"><div class="backup-actions"><button id="preview-button" class="secondary-button" type="button">Preview restore</button><button id="restore-button" class="danger-button" type="button" disabled>Restore these records</button></div><p id="backup-status" class="status" role="status" aria-live="polite"></p></section>
+        </section>
+        <section id="view-more" data-view="more" class="view" hidden>
+          <div class="page-heading"><span class="eyebrow">Explore</span><h1>More to come</h1><p>Your logging tools are ready. These spaces show where the app can grow.</p></div>
+          <div class="feature-grid">
+            <a href="#exercises" class="feature-card"><strong>Exercises</strong><span>Favorites and logged movements</span></a><a href="#progress" class="feature-card"><strong>Progress</strong><span>Review recorded activity</span></a><a href="#backup" class="feature-card"><strong>Backup</strong><span>Export and recover records</span></a>
+            <a href="#coming/plans" class="feature-card"><strong>Workout plans</strong><span>Coming soon</span></a><a href="#coming/cardio" class="feature-card"><strong>Cardio &amp; sports</strong><span>Coming soon</span></a><a href="#coming/nutrition" class="feature-card"><strong>Meals &amp; nutrition</strong><span>Coming soon</span></a>
+            <a href="#coming/reminders" class="feature-card"><strong>Reminders</strong><span>Coming soon</span></a><a href="#coming/voice" class="feature-card"><strong>Voice entry</strong><span>Coming soon</span></a><a href="#coming/measurements" class="feature-card"><strong>Measurements</strong><span>Coming soon</span></a><a href="#coming/wearables" class="feature-card"><strong>Wearables</strong><span>Coming soon</span></a>
           </div>
-
-          <div class="pair">
-            <div>
-              <label for="unit">Unit</label>
-              <select id="unit" name="unit"><option value="kg">kg</option><option value="lb">lb</option></select>
-            </div>
-            <div>
-              <label for="load-type">Load means</label>
-              <select id="load-type" name="load_type"><option value="total">Total</option><option value="per_hand">Per hand</option></select>
-            </div>
-          </div>
-
-          <button id="save-button" type="submit">Save set</button>
-          <p id="save-status" class="status" role="status" aria-live="polite"></p>
-        </form>
-        <div id="last-saved" class="last-saved" hidden>
-          <h3>Just saved</h3>
-          <p id="last-saved-details"></p>
-          <button id="repeat-values" class="secondary-button" type="button">Repeat values</button>
-        </div>
-      </section>
-
-      <section class="history" aria-labelledby="history-heading">
-        <div class="history-heading"><h2 id="history-heading">Saved history</h2><button id="refresh-button" class="text-button" type="button">Refresh</button></div>
-        <p id="history-status" class="muted" role="status"></p>
-        <ul id="history-list" class="history-list"></ul>
-      </section>
-
-      <section class="backup card" aria-labelledby="backup-heading">
-        <h2 id="backup-heading">Backup and restore</h2>
-        <p>Download a JSON copy of every set. Keep it somewhere safe. Restore accepts a backup only when this app has no sets, so existing records cannot be replaced by accident.</p>
-        <button id="export-button" class="secondary-button" type="button">Download backup</button>
-        <label for="backup-file">Restore from a backup file</label>
-        <input id="backup-file" type="file" accept=".json,application/json">
-        <div class="backup-actions">
-          <button id="preview-button" class="secondary-button" type="button">Preview restore</button>
-          <button id="restore-button" class="danger-button" type="button" disabled>Restore these sets</button>
-        </div>
-        <p id="backup-status" class="status" role="status" aria-live="polite"></p>
-      </section>
-    </main>
-  </body>
+        </section>
+        <section id="view-coming" data-view="coming" class="view" hidden><div class="coming-card"><span class="eyebrow">On the horizon</span><h1 id="coming-title">A new space</h1><p>This feature is coming soon!</p><a class="primary-link" href="#home">Back to overview</a></div></section>
+      </main>
+      <nav class="mobile-nav" aria-label="Mobile navigation"><a href="#home" data-nav="home">Home</a><a href="#log" data-nav="log">Log</a><a href="#history" data-nav="history">History</a><a href="#more" data-nav="more">More</a></nav>
+    </div>
+  </div>
+</body>
 </html>
