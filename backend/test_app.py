@@ -53,7 +53,7 @@ class SetStorageTests(unittest.TestCase):
         save_set(self.example, self.database)
         set_favorite({"exercise": "Goblet squat", "favorite": True}, self.database)
         backup = export_sets(self.database)
-        self.assertEqual(backup["version"], 2)
+        self.assertEqual(backup["version"], 3)
         replacement = Path(self.temp.name) / "replacement.sqlite3"
         preview = preview_restore(backup, replacement)
         self.assertEqual(preview["import_count"], 1)

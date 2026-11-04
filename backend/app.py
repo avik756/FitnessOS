@@ -15,6 +15,11 @@ from pathlib import Path
 from time import time
 from urllib.parse import parse_qs, urlsplit
 
+try:
+    from backend import features
+except ModuleNotFoundError:  # Also supports `python backend/app.py`.
+    import features
+
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "frontend"
@@ -61,6 +66,7 @@ def connect(database=DATABASE):
             exercise TEXT PRIMARY KEY COLLATE NOCASE
         )
     """)
+    features.ensure_schema(connection)
     return connection
 
 
@@ -244,8 +250,10 @@ def recent_exercises(database=DATABASE):
 def list_exercises(database=DATABASE):
     with closing(connect(database)) as connection:
         rows = connection.execute(
-            """SELECT exercise, COUNT(*) AS set_count, MAX(activity_date) AS last_date
-               FROM sets GROUP BY exercise COLLATE NOCASE ORDER BY MAX(id) DESC"""
+            """SELECT exercise, COUNT(activity_date) AS set_count, MAX(activity_date) AS last_date
+               FROM (SELECT exercise, activity_date FROM sets UNION ALL
+                     SELECT name AS exercise, NULL AS activity_date FROM custom_exercises)
+               GROUP BY exercise COLLATE NOCASE ORDER BY MAX(activity_date) DESC, exercise COLLATE NOCASE"""
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -288,33 +296,38 @@ def export_sets(database=DATABASE):
         rows = connection.execute(
             "SELECT activity_date, exercise, reps, load, unit, load_type FROM sets ORDER BY id"
         ).fetchall()
-    return {"format": "fitnessos-sets", "version": 2,
-            "sets": [dict(row) for row in rows], "favorites": list_favorites(database)}
+    return {"format": "fitnessos-sets", "version": 3,
+            "sets": [dict(row) for row in rows], "favorites": list_favorites(database),
+            **features.export_extra(database)}
 
 
 def validate_backup(data):
-    if not isinstance(data, dict) or data.get("format") != "fitnessos-sets" or data.get("version") not in (1, 2):
+    if not isinstance(data, dict) or data.get("format") != "fitnessos-sets" or data.get("version") not in (1, 2, 3):
         raise ValueError("This is not a supported FitnessOS set backup.")
     rows = data.get("sets")
     if not isinstance(rows, list) or len(rows) > 10000:
         raise ValueError("The backup must contain at most 10000 sets.")
-    favorites = data.get("favorites") if data["version"] == 2 else []
+    favorites = data.get("favorites") if data["version"] >= 2 else []
     if not isinstance(favorites, list) or len(favorites) > 10000 or any(
         not isinstance(name, str) or not 1 <= len(name.strip()) <= 80 for name in favorites
     ):
         raise ValueError("The backup has invalid favorite exercises.")
     if len({name.strip().casefold() for name in favorites}) != len(favorites):
         raise ValueError("The backup has duplicate favorite exercises.")
-    if not rows and not favorites:
-        raise ValueError("The backup contains no sets or favorites.")
-    return [validate_set(row) for row in rows], [name.strip() for name in favorites]
+    extra = features.validate_extra(data) if data["version"] == 3 else features.validate_extra({
+        "profile": {}, "body": [], "calories": [], "custom_exercises": [], "workouts": []})
+    if not rows and not favorites and not any((extra["body"], extra["calories"], extra["exercises"],
+                                               extra["workouts"], any(value is not None for value in extra["profile"]))):
+        raise ValueError("The backup contains no records.")
+    return [validate_set(row) for row in rows], [name.strip() for name in favorites], extra
 
 
 def preview_restore(data, database=DATABASE):
-    rows, favorites = validate_backup(data)
+    rows, favorites, extra = validate_backup(data)
     with closing(connect(database)) as connection:
         existing = connection.execute("SELECT COUNT(*) FROM sets").fetchone()[0]
         existing_favorites = connection.execute("SELECT COUNT(*) FROM favorites").fetchone()[0]
+        existing_other = features.existing_extra(connection)
     dates = [row[0] for row in rows]
     return {
         "import_count": len(rows),
@@ -323,16 +336,21 @@ def preview_restore(data, database=DATABASE):
         "first_date": min(dates) if dates else None,
         "last_date": max(dates) if dates else None,
         "existing_favorite_count": existing_favorites,
-        "can_restore": existing == 0 and existing_favorites == 0,
+        "body_count": len(extra["body"]), "calorie_count": len(extra["calories"]),
+        "workout_count": len(extra["workouts"]), "exercise_count": len(extra["exercises"]),
+        "existing_other_count": existing_other,
+        "can_restore": existing == 0 and existing_favorites == 0 and existing_other == 0,
     }
 
 
 def restore_sets(data, database=DATABASE):
-    rows, favorites = validate_backup(data)  # Validate everything before starting the write.
+    rows, favorites, extra = validate_backup(data)  # Validate everything before starting the write.
     with closing(connect(database)) as connection:
         with connection:
             connection.execute("BEGIN IMMEDIATE")
-            if connection.execute("SELECT COUNT(*) FROM sets").fetchone()[0] or connection.execute("SELECT COUNT(*) FROM favorites").fetchone()[0]:
+            if (connection.execute("SELECT COUNT(*) FROM sets").fetchone()[0]
+                    or connection.execute("SELECT COUNT(*) FROM favorites").fetchone()[0]
+                    or features.existing_extra(connection)):
                 raise ValueError("Restore requires empty records and favorites; existing data was kept.")
             created_at = datetime.now(timezone.utc).isoformat()
             connection.executemany(
@@ -342,6 +360,7 @@ def restore_sets(data, database=DATABASE):
                 [(*row, created_at) for row in rows],
             )
             connection.executemany("INSERT INTO favorites (exercise) VALUES (?)", [(name,) for name in favorites])
+            features.restore_extra(connection, extra, created_at)
     return len(rows)
 
 
@@ -413,6 +432,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             files = {
                 "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                "/features.js": ("features.js", "text/javascript; charset=utf-8"),
                 "/login.js": ("login.js", "text/javascript; charset=utf-8"),
                 "/style.css": ("style.css", "text/css; charset=utf-8"),
             }
@@ -421,7 +441,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_bytes(200, (STATIC / filename).read_bytes(), content_type)
                 return
             if path not in ("/api/sets", "/api/recent-exercises", "/api/exercises", "/api/overview",
-                            "/api/favorites", "/api/export"):
+                            "/api/favorites", "/api/export", "/api/body", "/api/body/stats", "/api/profile",
+                            "/api/calories", "/api/make", "/api/calendar", "/api/day"):
                 self.send_json(404, {"error": "Not found."})
                 return
             if not user:
@@ -439,10 +460,24 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, overview(self.server.database))
             elif path == "/api/favorites":
                 self.send_json(200, list_favorites(self.server.database))
+            elif path == "/api/body":
+                self.send_json(200, features.list_body(self.server.database))
+            elif path == "/api/body/stats":
+                self.send_json(200, features.body_stats(self.server.database))
+            elif path == "/api/profile":
+                self.send_json(200, features.get_profile(self.server.database))
+            elif path == "/api/calories":
+                self.send_json(200, features.list_calories(self.server.database))
+            elif path == "/api/make":
+                self.send_json(200, features.get_plans(self.server.database))
+            elif path == "/api/calendar":
+                self.send_json(200, features.calendar_month(parse_qs(parsed.query).get("month", [""])[0], self.server.database))
+            elif path == "/api/day":
+                self.send_json(200, features.calendar_day(parse_qs(parsed.query).get("date", [""])[0], self.server.database))
             else:
                 content = json.dumps(export_sets(self.server.database), indent=2).encode("utf-8")
                 self.send_bytes(200, content, "application/json; charset=utf-8",
-                                "attachment; filename=fitnessos-sets.json")
+                                "attachment; filename=fitnessos-backup.json")
         except ValueError as error:
             self.send_json(400, {"error": str(error)})
         except (sqlite3.Error, OSError):
@@ -454,7 +489,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path not in ("/api/auth/setup", "/api/auth/login", "/api/auth/logout", "/api/sets",
-                        "/api/favorites", "/api/restore/preview", "/api/restore"):
+                        "/api/favorites", "/api/restore/preview", "/api/restore", "/api/body",
+                        "/api/profile", "/api/calories", "/api/make/exercise", "/api/make/workout",
+                        "/api/make/day", "/api/make/day-exercise"):
             self.send_json(404, {"error": "Not found."})
             return
         if self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
@@ -486,6 +523,14 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/favorites":
                 result = set_favorite(data, self.server.database)
                 status = 200
+            elif path == "/api/body":
+                result, status = features.save_body(data, self.server.database), 201
+            elif path == "/api/profile":
+                result, status = features.save_profile(data, self.server.database), 200
+            elif path == "/api/calories":
+                result, status = features.save_calories(data, self.server.database), 201
+            elif path.startswith("/api/make/"):
+                result, status = features.make(data, path.rsplit("/", 1)[1], self.server.database), 201
             elif path == "/api/restore/preview":
                 result = preview_restore(data, self.server.database)
                 status = 200

@@ -102,7 +102,7 @@ class LocalHttpTests(unittest.TestCase):
             self.assertEqual(json.load(response)["favorites"], ["Goblet squat"])
         with self.get("/api/export", cookie) as response:
             backup = json.load(response)
-        self.assertEqual(backup["version"], 2)
+        self.assertEqual(backup["version"], 3)
         self.assertEqual(len(backup["sets"]), 2)
         self.assertEqual(backup["favorites"], ["Goblet squat"])
         with self.post("/api/restore/preview", backup, cookie) as response:
@@ -111,6 +111,24 @@ class LocalHttpTests(unittest.TestCase):
             self.post("/api/restore", backup, cookie)
         self.assertEqual(error.exception.code, 400)
         error.exception.close()
+
+    def test_new_routes_save_and_show_calendar_day(self):
+        cookie, _ = self.setup_account()
+        with self.get("/features.js") as response:
+            self.assertIn(b"loadCalendar", response.read())
+        with self.post("/api/body", {"activity_date": "2026-11-05", "weight": "70", "weight_unit": "kg",
+                                     "body_fat_pct": "", "measure_unit": "cm"}, cookie) as response:
+            self.assertEqual(response.status, 201)
+        with self.post("/api/calories", {"activity_date": "2026-11-05", "label": "Lunch", "kcal": 500}, cookie) as response:
+            self.assertEqual(response.status, 201)
+        with self.get("/api/calendar?month=2026-11", cookie) as response:
+            self.assertEqual(json.load(response)["2026-11-05"], {"sets": 0, "body": 1, "calories": 1})
+        with self.get("/api/day?date=2026-11-05", cookie) as response:
+            day = json.load(response)
+            self.assertEqual(day["body"][0]["weight"], "70")
+            self.assertEqual(day["calories"][0]["kcal"], 500)
+        with self.post("/api/make/workout", {"name": "Split"}, cookie) as response:
+            self.assertEqual(json.load(response)["workouts"][0]["name"], "Split")
 
 
 if __name__ == "__main__":

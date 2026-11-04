@@ -14,8 +14,8 @@ const lastSavedCard = document.querySelector("#last-saved");
 const lastSavedDetails = document.querySelector("#last-saved-details");
 const progressExercise = document.querySelector("#progress-exercise");
 const comingNames = {
-  plans: "Workout plans", cardio: "Cardio & sports", nutrition: "Meals & nutrition",
-  reminders: "Reminders", voice: "Voice entry", measurements: "Measurements", wearables: "Wearables",
+  cardio: "Cardio & sports", nutrition: "Detailed nutrition",
+  reminders: "Reminders", voice: "Voice entry", wearables: "Wearables",
 };
 let selectedRecentSet = null;
 let lastSavedSet = null;
@@ -97,7 +97,7 @@ function selectExerciseForLog(name) {
 function showRoute() {
   const raw = window.location.hash.slice(1) || "home";
   const route = raw.startsWith("coming/") ? "coming" : raw;
-  const known = ["home", "log", "history", "exercises", "progress", "backup", "more", "coming"];
+  const known = ["home", "log", "history", "body", "calories", "make", "exercises", "progress", "backup", "more", "coming"];
   const selected = known.includes(route) ? route : "home";
   for (const view of document.querySelectorAll("[data-view]")) view.hidden = view.dataset.view !== selected;
   if (selected === "coming") {
@@ -247,7 +247,7 @@ function renderExercises() {
     shortcuts.append(button);
   }
   for (const item of exercises) {
-    allList.append(exerciseCard(item.exercise, `${item.set_count} ${item.set_count === 1 ? "set" : "sets"} · last dated ${item.last_date}`, favoriteKey.has(item.exercise.toLowerCase())));
+    allList.append(exerciseCard(item.exercise, `${item.set_count} ${item.set_count === 1 ? "set" : "sets"}${item.last_date ? ` · last dated ${item.last_date}` : " · created exercise"}`, favoriteKey.has(item.exercise.toLowerCase())));
   }
   document.querySelector("#favorites-status").textContent = favorites.length ? "" : "No favorites yet. Add one from your logged exercises.";
   document.querySelector("#exercises-status").textContent = exercises.length ? `${exercises.length} ${exercises.length === 1 ? "exercise" : "exercises"} with records.` : "No exercises logged yet.";
@@ -430,7 +430,7 @@ document.querySelector("#export-button").addEventListener("click", async () => {
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement("a");
     link.href = url;
-    link.download = "fitnessos-sets.json";
+    link.download = "fitnessos-backup.json";
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     backupStatus.textContent = "Backup downloaded. Check that you can find the file.";
@@ -456,7 +456,7 @@ document.querySelector("#preview-button").addEventListener("click", async () => 
     const preview = await postBackup("/api/restore/preview", data);
     previewedBackup = data;
     const dates = preview.import_count ? `dated ${preview.first_date} to ${preview.last_date}` : "with no set dates";
-    backupStatus.textContent = `${preview.import_count} sets and ${preview.favorite_count} favorites ${dates}. ${preview.existing_count} sets and ${preview.existing_favorite_count} favorites currently saved. ${preview.can_restore ? "Ready to restore." : "Restore requires an empty set and favorites collection."}`;
+    backupStatus.textContent = `${preview.import_count} sets, ${preview.favorite_count} favorites, ${preview.body_count} body entries, ${preview.calorie_count} calorie entries, ${preview.workout_count} workouts, and ${preview.exercise_count} custom exercises ${dates}. ${preview.existing_count + preview.existing_favorite_count + preview.existing_other_count} items currently saved. ${preview.can_restore ? "Ready to restore." : "Restore requires an empty database of records."}`;
     restoreButton.disabled = !preview.can_restore;
   } catch (error) {
     backupStatus.textContent = `Cannot preview backup: ${error.message}`;
