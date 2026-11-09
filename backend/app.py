@@ -16,9 +16,10 @@ from time import time
 from urllib.parse import parse_qs, urlsplit
 
 try:
-    from backend import features
+    from backend import features, journal
 except ModuleNotFoundError:  # Also supports `python backend/app.py`.
     import features
+    import journal
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -67,6 +68,12 @@ def connect(database=DATABASE):
         )
     """)
     features.ensure_schema(connection)
+    journal.ensure_schema(connection)
+    for table, column, declaration in [('sets', 'session_id', 'TEXT'),
+                                        ('sets', 'session_exercise', 'INTEGER'),
+                                        ('sessions', 'photo_until', 'INTEGER NOT NULL DEFAULT 0')]:
+        if column not in {row[1] for row in connection.execute(f'PRAGMA table_info({table})')}:
+            connection.execute(f'ALTER TABLE {table} ADD COLUMN {column} {declaration}')
     return connection
 
 
@@ -158,6 +165,26 @@ def session_cookie(token, remember=False):
     return value + (f"; Max-Age={REMEMBER_SECONDS}" if remember else "")
 
 
+def photo_access(token, database=DATABASE, password=None, lock=False):
+    if not get_session(token, database):
+        return 0
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with closing(connect(database)) as connection, connection:
+        if password is not None:
+            account = connection.execute('SELECT * FROM account WHERE id = 1').fetchone()
+            if not isinstance(password, str) or not 1 <= len(password) <= 256:
+                raise ValueError('Enter your account password.')
+            candidate = hashlib.pbkdf2_hmac('sha256', password.encode(), account['salt'], PASSWORD_ITERATIONS)
+            if not hmac.compare_digest(candidate, account['password_hash']):
+                raise ValueError('Password is incorrect.')
+            connection.execute('UPDATE sessions SET photo_until = ? WHERE token_hash = ?',
+                               (int(time()) + 300, token_hash))
+        if lock:
+            connection.execute('UPDATE sessions SET photo_until = 0 WHERE token_hash = ?', (token_hash,))
+        until = connection.execute('SELECT photo_until FROM sessions WHERE token_hash = ?', (token_hash,)).fetchone()[0]
+    return until if until > time() else 0
+
+
 def validate_set(data):
     if not isinstance(data, dict):
         raise ValueError("Send one set as an object.")
@@ -200,7 +227,14 @@ def validate_set(data):
     if load_type not in ("total", "per_hand"):
         raise ValueError("Choose total or per hand.")
 
-    return (activity_date, exercise.strip(), reps, load, unit, load_type)
+    session_id = data.get('session_id')
+    position = data.get('session_exercise')
+    if session_id is not None:
+        if not isinstance(session_id, str) or len(session_id) != 36 or type(position) is not int or position < 0:
+            raise ValueError('Choose a valid workout exercise.')
+    elif position is not None:
+        raise ValueError('A workout exercise needs a workout session.')
+    return (activity_date, exercise.strip(), reps, load, unit, load_type, session_id, position)
 
 
 def save_set(data, database=DATABASE):
@@ -208,10 +242,16 @@ def save_set(data, database=DATABASE):
     created_at = datetime.now(timezone.utc).isoformat()
     with closing(connect(database)) as connection:
         with connection:
+            connection.execute('BEGIN IMMEDIATE')
+            if values[6]:
+                session = journal.get_entry(connection, values[6], 'workout')
+                if (session['status'] != 'active' or session['activity_date'] != values[0]
+                        or values[7] >= len(session['exercises']) or session['exercises'][values[7]] != values[1]):
+                    raise ValueError('Choose an active workout exercise and keep its date and name.')
             cursor = connection.execute(
                 """INSERT INTO sets
-                   (activity_date, exercise, reps, load, unit, load_type, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   (activity_date, exercise, reps, load, unit, load_type, session_id, session_exercise, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (*values, created_at),
             )
             row = connection.execute("SELECT * FROM sets WHERE id = ?", (cursor.lastrowid,)).fetchone()
@@ -294,15 +334,15 @@ def set_favorite(data, database=DATABASE):
 def export_sets(database=DATABASE):
     with closing(connect(database)) as connection:
         rows = connection.execute(
-            "SELECT activity_date, exercise, reps, load, unit, load_type FROM sets ORDER BY id"
+            "SELECT activity_date, exercise, reps, load, unit, load_type, session_id, session_exercise FROM sets ORDER BY id"
         ).fetchall()
-    return {"format": "fitnessos-sets", "version": 3,
+    return {"format": "fitnessos-sets", "version": 4, 'journal': journal.list_entries(database, photos=True),
             "sets": [dict(row) for row in rows], "favorites": list_favorites(database),
             **features.export_extra(database)}
 
 
 def validate_backup(data):
-    if not isinstance(data, dict) or data.get("format") != "fitnessos-sets" or data.get("version") not in (1, 2, 3):
+    if not isinstance(data, dict) or data.get("format") != "fitnessos-sets" or data.get("version") not in (1, 2, 3, 4):
         raise ValueError("This is not a supported FitnessOS set backup.")
     rows = data.get("sets")
     if not isinstance(rows, list) or len(rows) > 10000:
@@ -314,12 +354,20 @@ def validate_backup(data):
         raise ValueError("The backup has invalid favorite exercises.")
     if len({name.strip().casefold() for name in favorites}) != len(favorites):
         raise ValueError("The backup has duplicate favorite exercises.")
-    extra = features.validate_extra(data) if data["version"] == 3 else features.validate_extra({
+    extra = features.validate_extra(data) if data["version"] >= 3 else features.validate_extra({
         "profile": {}, "body": [], "calories": [], "custom_exercises": [], "workouts": []})
-    if not rows and not favorites and not any((extra["body"], extra["calories"], extra["exercises"],
+    extra['journal'] = journal.validate_backup(data.get('journal')) if data['version'] == 4 else []
+    sessions = {row['id']: row['data'] for row in extra['journal'] if row['kind'] == 'workout'}
+    validated = [validate_set(row) for row in rows]
+    for row in validated:
+        if row[6]:
+            session = sessions.get(row[6])
+            if not session or row[7] >= len(session['exercises']) or session['exercises'][row[7]] != row[1] or session['activity_date'] != row[0]:
+                raise ValueError('Backup has a set linked to an invalid workout exercise.')
+    if not rows and not favorites and not extra['journal'] and not any((extra["body"], extra["calories"], extra["exercises"],
                                                extra["workouts"], any(value is not None for value in extra["profile"]))):
         raise ValueError("The backup contains no records.")
-    return [validate_set(row) for row in rows], [name.strip() for name in favorites], extra
+    return validated, [name.strip() for name in favorites], extra
 
 
 def preview_restore(data, database=DATABASE):
@@ -327,7 +375,7 @@ def preview_restore(data, database=DATABASE):
     with closing(connect(database)) as connection:
         existing = connection.execute("SELECT COUNT(*) FROM sets").fetchone()[0]
         existing_favorites = connection.execute("SELECT COUNT(*) FROM favorites").fetchone()[0]
-        existing_other = features.existing_extra(connection)
+        existing_other = features.existing_extra(connection) + connection.execute('SELECT COUNT(*) FROM journal').fetchone()[0]
     dates = [row[0] for row in rows]
     return {
         "import_count": len(rows),
@@ -339,6 +387,8 @@ def preview_restore(data, database=DATABASE):
         "body_count": len(extra["body"]), "calorie_count": len(extra["calories"]),
         "workout_count": len(extra["workouts"]), "exercise_count": len(extra["exercises"]),
         "existing_other_count": existing_other,
+        'journal_count': len(extra['journal']),
+        'photo_count': sum(row['kind'] == 'photo' for row in extra['journal']),
         "can_restore": existing == 0 and existing_favorites == 0 and existing_other == 0,
     }
 
@@ -350,17 +400,18 @@ def restore_sets(data, database=DATABASE):
             connection.execute("BEGIN IMMEDIATE")
             if (connection.execute("SELECT COUNT(*) FROM sets").fetchone()[0]
                     or connection.execute("SELECT COUNT(*) FROM favorites").fetchone()[0]
-                    or features.existing_extra(connection)):
+                    or features.existing_extra(connection) or connection.execute('SELECT COUNT(*) FROM journal').fetchone()[0]):
                 raise ValueError("Restore requires empty records and favorites; existing data was kept.")
             created_at = datetime.now(timezone.utc).isoformat()
             connection.executemany(
                 """INSERT INTO sets
-                   (activity_date, exercise, reps, load, unit, load_type, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   (activity_date, exercise, reps, load, unit, load_type, session_id, session_exercise, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [(*row, created_at) for row in rows],
             )
             connection.executemany("INSERT INTO favorites (exercise) VALUES (?)", [(name,) for name in favorites])
             features.restore_extra(connection, extra, created_at)
+            journal.restore(connection, extra['journal'])
     return len(rows)
 
 
@@ -370,6 +421,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header('X-Content-Type-Options', 'nosniff')
         if disposition:
             self.send_header("Content-Disposition", disposition)
         for name, value in extra_headers:
@@ -404,6 +456,33 @@ class Handler(BaseHTTPRequestHandler):
     def current_user(self):
         return get_session(self.session_token(), self.server.database)
 
+    def require_photos(self):
+        if not photo_access(self.session_token(), self.server.database):
+            self.send_json(403, {'error': 'Unlock Photos with your password first (access lasts five minutes).'})
+            return False
+        return True
+
+    def journal_get(self, path, parsed):
+        database = self.server.database
+        if path == '/api/journal':
+            self.send_json(200, journal.list_entries(database))
+        elif path == '/api/workout-sets':
+            session_id = parse_qs(parsed.query).get('session', [''])[0]
+            with closing(connect(database)) as connection:
+                rows = connection.execute('SELECT * FROM sets WHERE session_id = ? ORDER BY id', (session_id,)).fetchall()
+            self.send_json(200, [dict(row) for row in rows])
+        elif path == '/api/photos/status':
+            self.send_json(200, {'until': photo_access(self.session_token(), database)})
+        elif path == '/api/photos' and self.require_photos():
+            photo_id = parse_qs(parsed.query).get('id', [None])[0]
+            if photo_id:
+                with closing(connect(database)) as connection:
+                    data = journal.get_entry(connection, photo_id, 'photo')
+                self.send_bytes(200, journal.photo_bytes(data['image']), 'image/jpeg')
+            else:
+                rows = journal.list_entries(database, 'photo', photos=True)
+                self.send_json(200, [{**row, 'data': {key: value for key, value in row['data'].items() if key != 'image'}} for row in rows])
+
     def do_GET(self):
         if not self.valid_host():
             self.send_json(403, {"error": "Invalid local host."})
@@ -433,12 +512,21 @@ class Handler(BaseHTTPRequestHandler):
             files = {
                 "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                 "/features.js": ("features.js", "text/javascript; charset=utf-8"),
+                '/journal.js': ('journal.js', 'text/javascript; charset=utf-8'),
+                '/journal.html': ('journal.html', 'text/html; charset=utf-8'),
+                '/voice.js': ('voice.js', 'text/javascript; charset=utf-8'),
                 "/login.js": ("login.js", "text/javascript; charset=utf-8"),
                 "/style.css": ("style.css", "text/css; charset=utf-8"),
             }
             if path in files:
                 filename, content_type = files[path]
                 self.send_bytes(200, (STATIC / filename).read_bytes(), content_type)
+                return
+            if path in ('/api/journal', '/api/workout-sets', '/api/photos', '/api/photos/status'):
+                if not user:
+                    self.send_json(401, {'error': 'Sign in to continue.'})
+                else:
+                    self.journal_get(path, parsed)
                 return
             if path not in ("/api/sets", "/api/recent-exercises", "/api/exercises", "/api/overview",
                             "/api/favorites", "/api/export", "/api/body", "/api/body/stats", "/api/profile",
@@ -475,6 +563,10 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/day":
                 self.send_json(200, features.calendar_day(parse_qs(parsed.query).get("date", [""])[0], self.server.database))
             else:
+                with closing(connect(self.server.database)) as connection:
+                    has_photos = connection.execute("SELECT 1 FROM journal WHERE kind = 'photo' LIMIT 1").fetchone()
+                if has_photos and not self.require_photos():
+                    return
                 content = json.dumps(export_sets(self.server.database), indent=2).encode("utf-8")
                 self.send_bytes(200, content, "application/json; charset=utf-8",
                                 "attachment; filename=fitnessos-backup.json")
@@ -491,7 +583,8 @@ class Handler(BaseHTTPRequestHandler):
         if path not in ("/api/auth/setup", "/api/auth/login", "/api/auth/logout", "/api/sets",
                         "/api/favorites", "/api/restore/preview", "/api/restore", "/api/body",
                         "/api/profile", "/api/calories", "/api/make/exercise", "/api/make/workout",
-                        "/api/make/day", "/api/make/day-exercise"):
+                        "/api/make/day", "/api/make/day-exercise", '/api/journal', '/api/water/undo',
+                        '/api/workouts/start', '/api/workouts/finish', '/api/photos/unlock', '/api/photos/lock'):
             self.send_json(404, {"error": "Not found."})
             return
         if self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
@@ -499,7 +592,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             size = int(self.headers.get("Content-Length", "0"))
-            limit = 10_000_000 if path.startswith("/api/restore") else 4096
+            limit = 64_000_000 if path.startswith('/api/restore') else (3_000_000 if path == '/api/journal' else 4096)
             if not 0 < size <= limit:
                 raise ValueError("Request is missing or too large.")
             data = json.loads(self.rfile.read(size))
@@ -517,7 +610,31 @@ class Handler(BaseHTTPRequestHandler):
             if not self.current_user():
                 self.send_json(401, {"error": "Sign in to continue."})
                 return
-            if path == "/api/sets":
+            if path in ('/api/photos/unlock', '/api/photos/lock'):
+                if not isinstance(data, dict):
+                    raise ValueError('Send an object.')
+                if path.endswith('unlock') and not data.get('password'):
+                    raise ValueError('Enter your account password.')
+                result = {'until': photo_access(self.session_token(), self.server.database,
+                          password=data.get('password') if path.endswith('unlock') else None, lock=path.endswith('/lock'))}
+                status = 200
+            elif path == '/api/journal':
+                if not isinstance(data, dict) or data.get('kind') not in ('water', 'sleep', 'steps', 'checkin', 'food', 'photo'):
+                    raise ValueError('Choose a supported entry type.')
+                if data['kind'] == 'photo' and not self.require_photos():
+                    return
+                result, status = journal.save(data['kind'], data.get('data'), self.server.database), 201
+            elif path in ('/api/workouts/start', '/api/workouts/finish', '/api/water/undo'):
+                if not isinstance(data, dict):
+                    raise ValueError('Send an object.')
+                if path.endswith('/start'):
+                    result = journal.start_workout(data, self.server.database)
+                else:
+                    if not isinstance(data.get('id'), str):
+                        raise ValueError('Choose a saved entry.')
+                    result = journal.update_state(self.server.database, data['id'], 'water' if path.startswith('/api/water') else 'workout')
+                status = 200
+            elif path == "/api/sets":
                 result = save_set(data, self.server.database)
                 status = 201
             elif path == "/api/favorites":

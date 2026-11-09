@@ -56,6 +56,9 @@ def ensure_schema(connection):
         CREATE INDEX IF NOT EXISTS body_date_idx ON body_entries(activity_date);
         CREATE INDEX IF NOT EXISTS calorie_date_idx ON calorie_entries(activity_date);
     """)
+    columns = {row[1] for row in connection.execute('PRAGMA table_info(calorie_entries)')}
+    if 'meal_time' not in columns:
+        connection.execute('ALTER TABLE calorie_entries ADD COLUMN meal_time TEXT')
 
 
 def db(database):
@@ -161,18 +164,26 @@ def validate_calories(data):
     if not isinstance(data, dict):
         raise ValueError("Send a calorie entry as an object.")
     day = valid_date(data.get("activity_date"))
-    label = name(data.get("label"), "a food or meal label")
+    label = name(data.get("label"), "a food or meal label", 240)
     kcal = data.get("kcal")
     if type(kcal) is not int or not 0 <= kcal <= 20000:
         raise ValueError("Calories must be a whole number from 0 to 20000.")
-    return day, label, kcal
+    meal_time = data.get('meal_time') or None
+    if meal_time is not None:
+        try:
+            if not isinstance(meal_time, str) or len(meal_time) != 5:
+                raise ValueError
+            datetime.strptime(meal_time, '%H:%M')
+        except ValueError:
+            raise ValueError('Choose a valid meal time.') from None
+    return day, label, kcal, meal_time
 
 
 def save_calories(data, database):
     values = validate_calories(data)
     with closing(db(database)) as connection:
         with connection:
-            cursor = connection.execute("INSERT INTO calorie_entries (activity_date, label, kcal, created_at) VALUES (?, ?, ?, ?)", (*values, datetime.now(timezone.utc).isoformat()))
+            cursor = connection.execute("INSERT INTO calorie_entries (activity_date, label, kcal, meal_time, created_at) VALUES (?, ?, ?, ?, ?)", (*values, datetime.now(timezone.utc).isoformat()))
             row = connection.execute("SELECT * FROM calorie_entries WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return dict(row)
 
@@ -281,7 +292,7 @@ def export_extra(database):
     with closing(db(database)) as connection:
         body = [dict(row) for row in connection.execute("""SELECT activity_date, weight, weight_unit, body_fat_pct,
             waist, chest, hips, arm, thigh, measure_unit FROM body_entries ORDER BY id""")]
-        calories = [dict(row) for row in connection.execute("SELECT activity_date, label, kcal FROM calorie_entries ORDER BY id")]
+        calories = [dict(row) for row in connection.execute("SELECT activity_date, label, kcal, meal_time FROM calorie_entries ORDER BY id")]
     plans = get_plans(database)
     return {"profile": get_profile(database), "body": body, "calories": calories,
             "custom_exercises": plans["exercises"],
@@ -335,7 +346,7 @@ def restore_extra(connection, extra, created_at):
     connection.executemany("""INSERT INTO body_entries
         (activity_date, weight, weight_unit, body_fat_pct, waist, chest, hips, arm, thigh, measure_unit, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", [(*row, created_at) for row in extra["body"]])
-    connection.executemany("INSERT INTO calorie_entries (activity_date, label, kcal, created_at) VALUES (?, ?, ?, ?)",
+    connection.executemany("INSERT INTO calorie_entries (activity_date, label, kcal, meal_time, created_at) VALUES (?, ?, ?, ?, ?)",
                            [(*row, created_at) for row in extra["calories"]])
     connection.executemany("INSERT INTO custom_exercises (name) VALUES (?)", [(item,) for item in extra["exercises"]])
     for workout_name, days in extra["workouts"]:

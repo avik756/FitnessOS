@@ -1,4 +1,5 @@
 import json
+import base64
 import tempfile
 import threading
 import unittest
@@ -102,7 +103,7 @@ class LocalHttpTests(unittest.TestCase):
             self.assertEqual(json.load(response)["favorites"], ["Goblet squat"])
         with self.get("/api/export", cookie) as response:
             backup = json.load(response)
-        self.assertEqual(backup["version"], 3)
+        self.assertEqual(backup["version"], 4)
         self.assertEqual(len(backup["sets"]), 2)
         self.assertEqual(backup["favorites"], ["Goblet squat"])
         with self.post("/api/restore/preview", backup, cookie) as response:
@@ -129,6 +130,54 @@ class LocalHttpTests(unittest.TestCase):
             self.assertEqual(day["calories"][0]["kcal"], 500)
         with self.post("/api/make/workout", {"name": "Split"}, cookie) as response:
             self.assertEqual(json.load(response)["workouts"][0]["name"], "Split")
+
+    def test_photo_routes_and_backup_require_recent_password(self):
+        cookie, _ = self.setup_account()
+        photo = {'kind': 'photo', 'data': {'activity_date': '2026-11-10', 'category': 'Test',
+                 'image': base64.b64encode(b'\xff\xd8\xfftest\xff\xd9').decode()}}
+        for path in ['/api/journal', '/api/photos', '/api/workout-sets']:
+            with self.assertRaises(HTTPError) as error:
+                self.get(path)
+            self.assertEqual(error.exception.code, 401)
+            error.exception.close()
+        with self.assertRaises(HTTPError) as error:
+            self.post('/api/journal', photo, cookie)
+        self.assertEqual(error.exception.code, 403)
+        error.exception.close()
+        with self.post('/api/photos/unlock', {'password': 'correct horse'}, cookie) as response:
+            self.assertTrue(json.load(response)['until'])
+        with self.post('/api/journal', photo, cookie) as response:
+            photo_id = json.load(response)['id']
+        with self.get('/api/photos?id=' + photo_id, cookie) as response:
+            self.assertEqual(response.headers['Content-Type'], 'image/jpeg')
+            self.assertEqual(response.headers['Cache-Control'], 'no-store')
+        with self.get('/api/journal', cookie) as response:
+            self.assertEqual(json.load(response), [])
+        with self.get('/api/export', cookie) as response:
+            backup = json.load(response)
+            self.assertEqual(backup['journal'][0]['data']['image'], photo['data']['image'])
+        with self.post('/api/photos/lock', {}, cookie):
+            pass
+        for path in ['/api/photos', '/api/photos?id=' + photo_id, '/api/export']:
+            with self.assertRaises(HTTPError) as error:
+                self.get(path, cookie)
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+
+    def test_daily_routes_reject_invalid_data_and_keep_unknowns(self):
+        cookie, _ = self.setup_account()
+        for kind, data in [('water', {'ml': 250, 'time': '12:30'}), ('checkin', {'bloating': 0}), ('steps', {'count': 100})]:
+            with self.post('/api/journal', {'kind': kind, 'data': {'activity_date': '2026-11-10', **data}}, cookie) as response:
+                self.assertEqual(response.status, 201)
+        with self.get('/api/journal', cookie) as response:
+            rows = json.load(response)
+        self.assertEqual(len(rows), 3)
+        checkin = next(row for row in rows if row['kind'] == 'checkin')
+        self.assertIsNone(checkin['data']['mood'])
+        with self.assertRaises(HTTPError) as error:
+            self.post('/api/journal', {'kind': 'steps', 'data': {'activity_date': '2026-11-10', 'count': -1}}, cookie)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
 
 
 if __name__ == "__main__":

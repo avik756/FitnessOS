@@ -4,6 +4,27 @@
   background: #f5f7f2;
   font-synthesis: none;
 }
+textarea { width: 100%; padding: 12px; font: inherit; border: 1px solid #b8cbbd; border-radius: 10px; resize: vertical; }
+.daily-total { font-size: 1.5rem; font-weight: 750; color: #20563c; }
+.session-exercise { padding: 18px 0; border-bottom: 1px solid #e1e9de; }
+.voice-box { padding: 15px; margin-bottom: 18px; border: 1px solid #dbe9d9; border-radius: 12px; }
+.voice-box summary { cursor: pointer; font-weight: 700; min-height: 32px; }
+.voice-box .quick-links, #water-form .quick-links { margin-top: 16px; }
+#workout-context .inline-link { display: inline-block; padding: 12px; }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 16px; }
+.photo-grid figure { margin: 0; }
+.photo-grid img { display: block; width: 100%; max-height: 480px; object-fit: contain; background: #f1f5ef; border-radius: 12px; }
+.photo-grid figcaption { padding: 10px 0; overflow-wrap: anywhere; }
+.line-chart { display: block; width: 100%; min-width: 0; }
+.line-chart svg { display: block; width: 100%; height: auto; }
+.line-chart svg text { font: 13px system-ui, sans-serif; fill: #526859; }
+.trend-values { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: .8rem; padding-left: 20px; }
+.record-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.record-table td, .record-table th { text-align: left; border-bottom: 1px solid #e1e9de; padding: 10px 5px; }
+.record-table caption { text-align: left; padding: 12px 0; color: #617466; }
+.reminder-banner { position: fixed; z-index: 30; bottom: 80px; right: 16px; left: 16px; max-width: 650px; margin: auto; padding: 18px; display: flex; flex-wrap: wrap; gap: 12px; background: #eaf4e9; border: 2px solid #176b49; border-radius: 14px; box-shadow: 0 6px 30px #173b2e33; }
+#daily-timeline strong, #session-detail h2, .compact-list strong { overflow-wrap: anywhere; }
+button:disabled { cursor: not-allowed; opacity: .6; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; }

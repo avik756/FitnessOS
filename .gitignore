@@ -13,6 +13,7 @@ data/
 /databases/*
 !/databases/README.md
 fitnessos-sets*.json
+fitnessos-backup*.json
 
 # Editor and OS files
 .vscode/

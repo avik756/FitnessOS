@@ -68,6 +68,7 @@ function fillValues(set) {
 }
 
 function fillFromSavedSet(set) {
+  window.clearWorkoutContext?.();
   form.elements.activity_date.value = set.activity_date;
   form.elements.exercise.value = set.exercise;
   form.elements.unit.value = set.unit;
@@ -81,6 +82,7 @@ function fillFromSavedSet(set) {
 }
 
 function selectExerciseForLog(name) {
+  window.clearWorkoutContext?.();
   form.elements.exercise.value = name;
   const recent = recentSets.find((set) => set.exercise.toLowerCase() === name.toLowerCase());
   if (recent) {
@@ -97,7 +99,7 @@ function selectExerciseForLog(name) {
 function showRoute() {
   const raw = window.location.hash.slice(1) || "home";
   const route = raw.startsWith("coming/") ? "coming" : raw;
-  const known = ["home", "log", "history", "body", "calories", "make", "exercises", "progress", "backup", "more", "coming"];
+  const known = ["home", "log", "history", "body", "calories", "make", "exercises", "progress", "backup", "more", "coming", "daily", "workouts", "foods", "photos"];
   const selected = known.includes(route) ? route : "home";
   for (const view of document.querySelectorAll("[data-view]")) view.hidden = view.dataset.view !== selected;
   if (selected === "coming") {
@@ -350,6 +352,7 @@ async function loadProgress() {
 }
 
 form.elements.exercise.addEventListener("input", () => {
+  window.clearWorkoutContext?.();
   selectedRecentSet = null;
   copyRecentValuesButton.hidden = true;
 });
@@ -375,6 +378,7 @@ form.addEventListener("submit", async (event) => {
     activity_date: fields.get("activity_date"), exercise: fields.get("exercise"),
     reps: Number(fields.get("reps")), load: fields.get("load"),
     unit: fields.get("unit"), load_type: fields.get("load_type"),
+    session_id: window.workoutContext?.id ?? null, session_exercise: window.workoutContext?.position ?? null,
   };
   try {
     let response;
@@ -399,6 +403,7 @@ form.addEventListener("submit", async (event) => {
       return;
     }
     lastSavedSet = result;
+    window.dispatchEvent(new Event("records-changed"));
     lastSavedDetails.textContent = `${result.activity_date} · ${result.exercise} · ${describeSet(result)}`;
     lastSavedCard.hidden = false;
     showSaveStatus("Saved in this computer's database.", "success");
@@ -426,7 +431,7 @@ document.querySelector("#export-button").addEventListener("click", async () => {
   backupStatus.textContent = "Preparing backup…";
   try {
     const response = await apiFetch("/api/export", { cache: "no-store" });
-    if (!response.ok) throw new Error("Could not create the backup.");
+    if (!response.ok) { const failure = await response.json(); throw new Error(failure.error || "Could not create the backup."); }
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement("a");
     link.href = url;
@@ -456,7 +461,7 @@ document.querySelector("#preview-button").addEventListener("click", async () => 
     const preview = await postBackup("/api/restore/preview", data);
     previewedBackup = data;
     const dates = preview.import_count ? `dated ${preview.first_date} to ${preview.last_date}` : "with no set dates";
-    backupStatus.textContent = `${preview.import_count} sets, ${preview.favorite_count} favorites, ${preview.body_count} body entries, ${preview.calorie_count} calorie entries, ${preview.workout_count} workouts, and ${preview.exercise_count} custom exercises ${dates}. ${preview.existing_count + preview.existing_favorite_count + preview.existing_other_count} items currently saved. ${preview.can_restore ? "Ready to restore." : "Restore requires an empty database of records."}`;
+    backupStatus.textContent = `${preview.journal_count || 0} journal entries (including ${preview.photo_count || 0} photos), ${preview.import_count} sets, ${preview.favorite_count} favorites, ${preview.body_count} body entries, ${preview.calorie_count} calorie entries, ${preview.workout_count} workouts, and ${preview.exercise_count} custom exercises ${dates}. ${preview.existing_count + preview.existing_favorite_count + preview.existing_other_count} items currently saved. ${preview.can_restore ? "Ready to restore." : "Restore requires an empty database of records."}`;
     restoreButton.disabled = !preview.can_restore;
   } catch (error) {
     backupStatus.textContent = `Cannot preview backup: ${error.message}`;
@@ -469,7 +474,8 @@ restoreButton.addEventListener("click", async () => {
   try {
     const result = await postBackup("/api/restore", previewedBackup);
     previewedBackup = null;
-    backupStatus.textContent = `Restored ${result.restored} sets and ${result.favorites_restored} favorites. Check them in History and Exercises.`;
+    window.dispatchEvent(new Event("records-changed"));
+    backupStatus.textContent = `Restored ${result.restored} sets and ${result.favorites_restored} favorites. All record types restored. Review History, Daily journal, Workouts, Food library, and Photos.`;
     await loadExercises();
     await Promise.all([loadHistory(), loadRecentExercises(), loadOverview(), loadProgress()]);
   } catch (error) {
