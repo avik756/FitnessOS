@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101d18">
+  <meta name="description" content="FitnessOS is a personal fitness journal in development, built around quick logging and useful history.">
+  <title>FitnessOS — A better record of showing up</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #ecf4ed; background: #101d18; }
+    a { color: inherit; }
+    .shell { width: min(1120px, calc(100% - 40px)); margin: auto; }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 28px 0; border-bottom: 1px solid #ffffff20; }
+    .brand { display: inline-flex; align-items: center; gap: 11px; font-size: 18px; font-weight: 750; letter-spacing: -.035em; }
+    .mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; color: #14251a; background: #b9e984; font-weight: 850; }
+    .status { padding: 8px 12px; border: 1px solid #b9e9844d; border-radius: 999px; color: #ccecae; font-size: 12px; font-weight: 650; letter-spacing: .03em; }
+    main { display: grid; grid-template-columns: 1.04fr .96fr; align-items: center; gap: clamp(28px, 5vw, 80px); padding: clamp(70px, 9vw, 132px) 0 92px; }
+    .eyebrow { color: #b9e984; text-transform: uppercase; letter-spacing: .18em; font-size: 12px; font-weight: 800; }
+    h1 { max-width: 670px; margin: 22px 0 24px; font-size: clamp(49px, 6vw, 79px); line-height: 1.04; letter-spacing: -.065em; }
+    .accent { color: #b9e984; }
+    .intro { max-width: 540px; color: #c0cdc4; line-height: 1.7; font-size: clamp(17px, 1.8vw, 20px); }
+    .notice { max-width: 540px; margin-top: 36px; padding: 17px 20px; border-left: 3px solid #b9e984; border-radius: 0 12px 12px 0; background: #203329; color: #d4dfd5; line-height: 1.55; font-size: 14px; }
+    .notice strong { display: block; margin-bottom: 3px; color: #f3f8ed; }
+    .preview { position: relative; padding: 24px; border-radius: 32px; background: radial-gradient(circle at 70% 20%, #77994d55, transparent 45%), #1b3026; box-shadow: 0 30px 90px #030b0780; }
+    .preview::after { content: "Interface preview"; position: absolute; right: 26px; bottom: -25px; color: #a8baa9; font-size: 12px; letter-spacing: .04em; }
+    .app { overflow: hidden; border: 1px solid #ffffff1f; border-radius: 22px; background: #f5f7f1; color: #172820; box-shadow: 0 20px 45px #09170d80; }
+    .app-top { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; background: #e9efdf; border-bottom: 1px solid #d9e4d3; font-size: 13px; font-weight: 750; }
+    .app-top span:last-child { color: #577555; font-weight: 600; }
+    .app-body { padding: 26px 25px 28px; }
+    .app-label { color: #64805f; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .13em; }
+    .app h2 { margin: 9px 0 5px; font-size: 26px; letter-spacing: -.045em; }
+    .app p { margin: 0 0 24px; color: #68776b; font-size: 13px; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 0; border-top: 1px solid #dde5d9; font-size: 14px; }
+    .row b { font-size: 14px; }
+    .row small { display: block; margin-top: 3px; color: #718274; }
+    .pill { flex: none; padding: 8px 10px; border-radius: 10px; background: #e5efda; color: #3c673b; font-size: 12px; font-weight: 750; }
+    .app-foot { margin-top: 17px; padding: 13px; border-radius: 11px; background: #204b37; color: #f2f8ee; text-align: center; font-size: 13px; font-weight: 700; }
+    section.features { padding: 40px 0 90px; border-top: 1px solid #ffffff20; }
+    .features h2 { margin: 0 0 22px; font-size: 26px; letter-spacing: -.04em; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .feature { padding: 25px; border: 1px solid #ffffff19; border-radius: 18px; background: #192a21; }
+    .feature h3 { margin: 0 0 8px; font-size: 16px; }
+    .feature p { margin: 0; color: #b6c7b9; font-size: 14px; line-height: 1.6; }
+    footer { padding: 24px 0 35px; border-top: 1px solid #ffffff20; color: #9cae9f; font-size: 13px; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; padding-top: 72px; } .preview { width: min(100%, 500px); margin: 0 auto 28px; } .grid { grid-template-columns: 1fr; } }
+    @media (max-width: 440px) { .shell { width: min(100% - 30px, 1120px); } header { padding: 19px 0; } .status { font-size: 10px; } .preview { padding: 13px; border-radius: 24px; } .app-body { padding: 21px 18px; } h1 { font-size: 51px; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="brand"><span class="mark">F</span> FitnessOS</div>
+      <span class="status">In development</span>
+    </header>
+    <main>
+      <div>
+        <div class="eyebrow">Your fitness, in context</div>
+        <h1>Keep showing up.<br><span class="accent">Keep the story.</span></h1>
+        <p class="intro">A personal space to log your workouts and daily habits, then find the details that help you understand your progress.</p>
+        <div class="notice"><strong>This is a preview.</strong>The working prototype currently runs locally. Online accounts, logging, and saved records are being prepared for a future release.</div>
+      </div>
+      <div class="preview" aria-label="Illustrative FitnessOS interface preview">
+        <div class="app">
+          <div class="app-top"><span>FitnessOS / Today</span><span>Overview</span></div>
+          <div class="app-body">
+            <div class="app-label">Workout journal</div>
+            <h2>A little progress adds up.</h2>
+            <p>Your training, one session at a time.</p>
+            <div class="row"><div><b>Strength sets</b><small>Exercise · reps · load</small></div><span class="pill">Log & review</span></div>
+            <div class="row"><div><b>Daily journal</b><small>Sleep · water · steps</small></div><span class="pill">Build context</span></div>
+            <div class="row"><div><b>History</b><small>Find the days you showed up</small></div><span class="pill">Look back</span></div>
+            <div class="app-foot">Your record, at your pace</div>
+          </div>
+        </div>
+      </div>
+    </main>
+    <section class="features" aria-labelledby="features-title">
+      <h2 id="features-title">What the local prototype explores</h2>
+      <div class="grid">
+        <div class="feature"><h3>Fast workout logging</h3><p>Record sets, revisit recent exercises, and start sessions from saved workout days.</p></div>
+        <div class="feature"><h3>A useful history</h3><p>Explore calendar entries and recorded trends without turning every number into a verdict.</p></div>
+        <div class="feature"><h3>More of the day</h3><p>Bring body measurements, meals, sleep, water, steps, and private photos into one journal.</p></div>
+      </div>
+    </section>
+    <footer>FitnessOS is a work in progress. This public page does not collect or store fitness data.</footer>
+  </div>
+</body>
+</html>

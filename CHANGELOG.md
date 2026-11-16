@@ -2,6 +2,12 @@
 
 This file records semi-important and larger product changes, architecture choices, and decisions. Each entry describes what changed and why when that reason is known. It is a concise project record; Git history remains the place to inspect detailed code changes.
 
+## 2026-11-17 - Static deployment preview
+
+- **Decision:** Avik wants a page to open on Vercel now and the complete app hosted eventually.
+- **Implemented:** A public, read-only preview page and Vercel static output configuration. It describes the local prototype but does not offer login, logging, or record storage.
+- **Future work:** Hosting the working Python app requires a request-based server entry point, an appropriate origin policy, and persistent storage for accounts and records. The local SQLite file cannot serve as durable Vercel storage.
+
 ## 2026-11-10 — Daily records and routine logging prototype
 
 - **Implemented:** Saved workout days can start dated sessions. Their exercises open the existing set logger, and saved sets stay linked to the session. Finishing a session leaves its history readable. Avik asked for this without changing the set-entry controls.
