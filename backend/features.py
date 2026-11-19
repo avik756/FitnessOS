@@ -1,6 +1,8 @@
 """Body, food, calendar, and reusable workout data for the local app."""
 
 import sqlite3
+import json
+import math
 from contextlib import closing
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -57,6 +59,9 @@ def ensure_schema(connection):
         CREATE INDEX IF NOT EXISTS calorie_date_idx ON calorie_entries(activity_date);
     """)
     columns = {row[1] for row in connection.execute('PRAGMA table_info(calorie_entries)')}
+    if 'nutrition' not in columns:
+        connection.execute("ALTER TABLE calorie_entries ADD COLUMN nutrition TEXT")
+    connection.execute("CREATE TABLE IF NOT EXISTS workspace (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL)")
     if 'meal_time' not in columns:
         connection.execute('ALTER TABLE calorie_entries ADD COLUMN meal_time TEXT')
 
@@ -176,14 +181,15 @@ def validate_calories(data):
             datetime.strptime(meal_time, '%H:%M')
         except ValueError:
             raise ValueError('Choose a valid meal time.') from None
-    return day, label, kcal, meal_time
+    nutrition = validate_nutrition(data.get("nutrition"))
+    return day, label, kcal, meal_time, json.dumps(nutrition) if nutrition else None
 
 
 def save_calories(data, database):
     values = validate_calories(data)
     with closing(db(database)) as connection:
         with connection:
-            cursor = connection.execute("INSERT INTO calorie_entries (activity_date, label, kcal, meal_time, created_at) VALUES (?, ?, ?, ?, ?)", (*values, datetime.now(timezone.utc).isoformat()))
+            cursor = connection.execute("INSERT INTO calorie_entries (activity_date, label, kcal, meal_time, nutrition, created_at) VALUES (?, ?, ?, ?, ?, ?)", (*values, datetime.now(timezone.utc).isoformat()))
             row = connection.execute("SELECT * FROM calorie_entries WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return dict(row)
 
@@ -292,9 +298,9 @@ def export_extra(database):
     with closing(db(database)) as connection:
         body = [dict(row) for row in connection.execute("""SELECT activity_date, weight, weight_unit, body_fat_pct,
             waist, chest, hips, arm, thigh, measure_unit FROM body_entries ORDER BY id""")]
-        calories = [dict(row) for row in connection.execute("SELECT activity_date, label, kcal, meal_time FROM calorie_entries ORDER BY id")]
+        calories = [dict(row) for row in connection.execute("SELECT activity_date, label, kcal, meal_time, nutrition FROM calorie_entries ORDER BY id")]
     plans = get_plans(database)
-    return {"profile": get_profile(database), "body": body, "calories": calories,
+    return {"workspace": get_workspace(database), "profile": get_profile(database), "body": body, "calories": calories,
             "custom_exercises": plans["exercises"],
             "workouts": [{"name": workout["name"], "days": [
                 {"name": day["name"], "exercises": day["exercises"]} for day in workout["days"]
@@ -329,7 +335,7 @@ def validate_extra(data):
         clean_workouts.append((name(workout.get("name"), "a workout name"), days))
     if len({workout[0].casefold() for workout in clean_workouts}) != len(clean_workouts):
         raise ValueError("Backup has duplicate workouts.")
-    return {"profile": profile, "body": [validate_body(row) for row in body],
+    return {"workspace": validate_workspace(data.get("workspace", {})), "profile": profile, "body": [validate_body(row) for row in body],
             "calories": [validate_calories(row) for row in calories],
             "exercises": clean_exercises, "workouts": clean_workouts}
 
@@ -340,13 +346,14 @@ def existing_extra(connection):
 
 
 def restore_extra(connection, extra, created_at):
+    connection.execute("INSERT OR REPLACE INTO workspace VALUES (1, ?)", (json.dumps(extra.get("workspace", {})),))
     height, age, variant = extra["profile"]
     if any(value is not None for value in (height, age, variant)):
         connection.execute("INSERT INTO profile (id, height_cm, age_years, formula_variant) VALUES (1, ?, ?, ?)", (height, age, variant))
     connection.executemany("""INSERT INTO body_entries
         (activity_date, weight, weight_unit, body_fat_pct, waist, chest, hips, arm, thigh, measure_unit, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", [(*row, created_at) for row in extra["body"]])
-    connection.executemany("INSERT INTO calorie_entries (activity_date, label, kcal, meal_time, created_at) VALUES (?, ?, ?, ?, ?)",
+    connection.executemany("INSERT INTO calorie_entries (activity_date, label, kcal, meal_time, nutrition, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                            [(*row, created_at) for row in extra["calories"]])
     connection.executemany("INSERT INTO custom_exercises (name) VALUES (?)", [(item,) for item in extra["exercises"]])
     for workout_name, days in extra["workouts"]:
@@ -355,3 +362,152 @@ def restore_extra(connection, extra, created_at):
             day_id = connection.execute("INSERT INTO plan_days (workout_id, name) VALUES (?, ?)", (workout_id, day_name)).lastrowid
             connection.executemany("INSERT INTO day_exercises (day_id, exercise, position) VALUES (?, ?, ?)",
                                    [(day_id, exercise, position) for position, exercise in enumerate(exercises)])
+
+
+NUTRIENTS = ('protein', 'carbs', 'fat', 'fiber', 'sugar', 'saturated_fat', 'sodium', 'calcium', 'iron', 'potassium', 'vitamin_c', 'vitamin_d')
+
+
+def validate_nutrition(value):
+    if value in (None, ''):
+        return None
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            raise ValueError('Invalid nutrition details.') from None
+    if not isinstance(value, dict):
+        raise ValueError('Nutrition must be an object.')
+    result = {}
+    for key in NUTRIENTS:
+        item = value.get(key)
+        if item in (None, ''):
+            result[key] = None
+        elif type(item) not in (int, float) or not math.isfinite(item) or not 0 <= item <= 100000:
+            raise ValueError('Nutrient values must be positive finite numbers or blank.')
+        else:
+            result[key] = item
+    result['source'] = name(value.get('source', 'Manual'), 'a source', 240)
+    return result
+
+
+def validate_workspace(value):
+    if not isinstance(value, dict) or len(json.dumps(value)) > 150000:
+        raise ValueError('Workspace layout is invalid or too large.')
+    if value.get('theme', 'dark') not in ('dark', 'light'):
+        raise ValueError('Choose a supported theme.')
+    if value.get('font', 'serif') not in ('serif', 'sans', 'mono'):
+        raise ValueError('Choose a supported font.')
+    steps = value.get('steps', {})
+    if not isinstance(steps, dict) or len(steps) > 500:
+        raise ValueError('Invalid exercise step preferences.')
+    for key, step in steps.items():
+        if not isinstance(key, str) or len(key) > 150 or type(step) not in (int, float) or not math.isfinite(step) or not 0 < step <= 1000:
+            raise ValueError('Load steps must be between zero and 1000.')
+    sections = value.get('sections', [])
+    if not isinstance(sections, list) or len(sections) > 150:
+        raise ValueError('Use at most 150 sections.')
+    ids = set()
+    for section in sections:
+        if not isinstance(section, dict):
+            raise ValueError('Invalid section.')
+        identity = name(section.get('id'), 'a section id')
+        if identity in ids:
+            raise ValueError('Duplicate section id.')
+        ids.add(identity)
+        name(section.get('title'), 'a section title')
+        if section.get('parent') is not None and not isinstance(section['parent'], str):
+            raise ValueError('Invalid parent section.')
+        if not isinstance(section.get('emoji', ''), str) or len(section.get('emoji', '')) > 16:
+            raise ValueError('Use a short emoji icon.')
+        if type(section.get('collapsed', False)) is not bool:
+            raise ValueError('Invalid section collapse setting.')
+        if section.get('route', 'daily') not in ('home','workouts','log','calories','foods','body','daily','history','progress','photos','make','backup','exercises'):
+            raise ValueError('Choose an existing page for the section.')
+        if section.get('color', 'default') not in ('default','gray','brown','orange','yellow','green','blue','purple','pink','red'):
+            raise ValueError('Choose a supported section colour.')
+    parents = {item['id']: item.get('parent') for item in sections}
+    for identity in parents:
+        seen = {identity}
+        parent = parents[identity]
+        while parent:
+            if parent not in parents or parent in seen:
+                raise ValueError('Section nesting contains a cycle or missing parent.')
+            seen.add(parent)
+            parent = parents[parent]
+    pages = value.get('pages', [])
+    blocks = value.get('blocks', [])
+    if not isinstance(pages, list) or len(pages) > 100 or not isinstance(blocks, list) or len(blocks) > 500:
+        raise ValueError('Too many pages or blocks.')
+    page_parents = {}
+    for page in pages:
+        if not isinstance(page, dict):
+            raise ValueError('Invalid page.')
+        identity = name(page.get('id'), 'a page id', 80)
+        if identity in page_parents:
+            raise ValueError('Duplicate page id.')
+        name(page.get('title'), 'a page title', 80)
+        if not isinstance(page.get('emoji', ''), str) or len(page.get('emoji', '')) > 16:
+            raise ValueError('Invalid page icon.')
+        if page.get('parent') is not None and not isinstance(page.get('parent'), str):
+            raise ValueError('Invalid parent page.')
+        page_parents[identity] = page.get('parent')
+    for identity in page_parents:
+        seen = {identity}
+        parent = page_parents[identity]
+        while parent is not None:
+            if parent not in page_parents or parent in seen:
+                raise ValueError('Invalid page nesting.')
+            seen.add(parent)
+            parent = page_parents[parent]
+    block_parents = {}
+    block_pages = {}
+    containers = set()
+    routes = {'home','workouts','log','calories','foods','body','daily','history','progress','photos','make','backup','exercises'}
+    for block in blocks:
+        if not isinstance(block, dict):
+            raise ValueError('Invalid block.')
+        identity = name(block.get('id'), 'a block id', 80)
+        if identity in block_parents or not isinstance(block.get('page'), str) or block['page'] not in page_parents:
+            raise ValueError('Duplicate block id or missing page.')
+        kind = block.get('kind')
+        if not isinstance(kind, str) or kind not in ('section', 'text', 'heading', 'divider', 'tool', 'sets', 'action'):
+            raise ValueError('Unsupported block type.')
+        for key in ('title', 'text'):
+            if not isinstance(block.get(key, ''), str) or len(block.get(key, '')) > 4000:
+                raise ValueError('Invalid block content.')
+        if kind == 'tool' and (not isinstance(block.get('route'), str) or block['route'] not in routes):
+            raise ValueError('Invalid tool link.')
+        if kind == 'action' and (not isinstance(block.get('route'), str) or block['route'] not in {'log', 'workouts', 'calories', 'daily'}):
+            raise ValueError('Invalid action.')
+        if kind == 'sets' and (not isinstance(block.get('exercise', ''), str) or len(block.get('exercise', '')) > 80):
+            raise ValueError('Invalid exercise filter.')
+        if type(block.get('collapsed', False)) is not bool:
+            raise ValueError('Invalid collapse setting.')
+        if block.get('parent') is not None and not isinstance(block.get('parent'), str):
+            raise ValueError('Invalid parent block.')
+        if kind == 'section':
+            containers.add(identity)
+        block_parents[identity] = block.get('parent')
+        block_pages[identity] = block['page']
+    for identity in block_parents:
+        seen = {identity}
+        parent = block_parents[identity]
+        while parent is not None:
+            if parent not in containers or parent in seen or block_pages[parent] != block_pages[identity]:
+                raise ValueError('Invalid block nesting.')
+            seen.add(parent)
+            parent = block_parents[parent]
+    return value
+
+
+def get_workspace(database):
+    with closing(db(database)) as connection:
+        row = connection.execute('SELECT data FROM workspace WHERE id=1').fetchone()
+    return json.loads(row[0]) if row else {}
+
+
+def save_workspace(value, database):
+    value = validate_workspace(value)
+    with closing(db(database)) as connection, connection:
+        connection.execute('INSERT OR REPLACE INTO workspace VALUES (1, ?)', (json.dumps(value),))
+    return value

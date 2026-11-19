@@ -17,9 +17,11 @@ from urllib.parse import parse_qs, urlsplit
 
 try:
     from backend import features, journal
+    from backend.exercise_catalogue import EXERCISES
 except ModuleNotFoundError:  # Also supports `python backend/app.py`.
     import features
     import journal
+    from exercise_catalogue import EXERCISES
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -295,7 +297,11 @@ def list_exercises(database=DATABASE):
                      SELECT name AS exercise, NULL AS activity_date FROM custom_exercises)
                GROUP BY exercise COLLATE NOCASE ORDER BY MAX(activity_date) DESC, exercise COLLATE NOCASE"""
         ).fetchall()
-    return [dict(row) for row in rows]
+    entries = [dict(row) for row in rows]
+    existing = {row['exercise'].casefold() for row in entries}
+    entries.extend({'exercise': name, 'set_count': 0, 'last_date': None}
+                   for name in EXERCISES if name.casefold() not in existing)
+    return entries
 
 
 def overview(database=DATABASE):
@@ -336,13 +342,13 @@ def export_sets(database=DATABASE):
         rows = connection.execute(
             "SELECT activity_date, exercise, reps, load, unit, load_type, session_id, session_exercise FROM sets ORDER BY id"
         ).fetchall()
-    return {"format": "fitnessos-sets", "version": 4, 'journal': journal.list_entries(database, photos=True),
+    return {"format": "fitnessos-sets", "version": 5, 'journal': journal.list_entries(database, photos=True),
             "sets": [dict(row) for row in rows], "favorites": list_favorites(database),
             **features.export_extra(database)}
 
 
 def validate_backup(data):
-    if not isinstance(data, dict) or data.get("format") != "fitnessos-sets" or data.get("version") not in (1, 2, 3, 4):
+    if not isinstance(data, dict) or data.get("format") != "fitnessos-sets" or data.get("version") not in (1, 2, 3, 4, 5):
         raise ValueError("This is not a supported FitnessOS set backup.")
     rows = data.get("sets")
     if not isinstance(rows, list) or len(rows) > 10000:
@@ -356,7 +362,7 @@ def validate_backup(data):
         raise ValueError("The backup has duplicate favorite exercises.")
     extra = features.validate_extra(data) if data["version"] >= 3 else features.validate_extra({
         "profile": {}, "body": [], "calories": [], "custom_exercises": [], "workouts": []})
-    extra['journal'] = journal.validate_backup(data.get('journal')) if data['version'] == 4 else []
+    extra['journal'] = journal.validate_backup(data.get('journal')) if data['version'] >= 4 else []
     sessions = {row['id']: row['data'] for row in extra['journal'] if row['kind'] == 'workout'}
     validated = [validate_set(row) for row in rows]
     for row in validated:
@@ -364,7 +370,7 @@ def validate_backup(data):
             session = sessions.get(row[6])
             if not session or row[7] >= len(session['exercises']) or session['exercises'][row[7]] != row[1] or session['activity_date'] != row[0]:
                 raise ValueError('Backup has a set linked to an invalid workout exercise.')
-    if not rows and not favorites and not extra['journal'] and not any((extra["body"], extra["calories"], extra["exercises"],
+    if not rows and not favorites and not extra.get("workspace") and not extra['journal'] and not any((extra["body"], extra["calories"], extra["exercises"],
                                                extra["workouts"], any(value is not None for value in extra["profile"]))):
         raise ValueError("The backup contains no records.")
     return validated, [name.strip() for name in favorites], extra
@@ -510,6 +516,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_bytes(200, (STATIC / "login.html").read_bytes(), "text/html; charset=utf-8")
                 return
             files = {
+                "/appearance.js": ("appearance.js", "text/javascript; charset=utf-8"),
+                "/workspace.js": ("workspace.js", "text/javascript; charset=utf-8"),
+                "/workspace_pages.js": ("workspace_pages.js", "text/javascript; charset=utf-8"),
+                "/shell.js": ("shell.js", "text/javascript; charset=utf-8"),
+                "/nutrition.js": ("nutrition.js", "text/javascript; charset=utf-8"),
                 "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                 "/features.js": ("features.js", "text/javascript; charset=utf-8"),
                 '/journal.js': ('journal.js', 'text/javascript; charset=utf-8'),
@@ -530,13 +541,21 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path not in ("/api/sets", "/api/recent-exercises", "/api/exercises", "/api/overview",
                             "/api/favorites", "/api/export", "/api/body", "/api/body/stats", "/api/profile",
-                            "/api/calories", "/api/make", "/api/calendar", "/api/day"):
+                            "/api/workspace", "/api/food-search", "/api/calories", "/api/make", "/api/calendar", "/api/day"):
                 self.send_json(404, {"error": "Not found."})
                 return
             if not user:
                 self.send_json(401, {"error": "Sign in to continue."})
                 return
-            if path == "/api/sets":
+            if path == "/api/workspace":
+                self.send_json(200, features.get_workspace(self.server.database))
+            elif path == "/api/food-search":
+                try:
+                    from backend.food_lookup import search
+                except ModuleNotFoundError:
+                    from food_lookup import search
+                self.send_json(200, search(parse_qs(parsed.query).get("q", [""])[0]))
+            elif path == "/api/sets":
                 query = parse_qs(parsed.query)
                 exercise = query.get("exercise", [None])[0]
                 self.send_json(200, list_sets(self.server.database, exercise))
@@ -582,7 +601,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path not in ("/api/auth/setup", "/api/auth/login", "/api/auth/logout", "/api/sets",
                         "/api/favorites", "/api/restore/preview", "/api/restore", "/api/body",
-                        "/api/profile", "/api/calories", "/api/make/exercise", "/api/make/workout",
+                        "/api/workspace", "/api/profile", "/api/calories", "/api/make/exercise", "/api/make/workout",
                         "/api/make/day", "/api/make/day-exercise", '/api/journal', '/api/water/undo',
                         '/api/workouts/start', '/api/workouts/finish', '/api/photos/unlock', '/api/photos/lock'):
             self.send_json(404, {"error": "Not found."})
@@ -592,7 +611,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             size = int(self.headers.get("Content-Length", "0"))
-            limit = 64_000_000 if path.startswith('/api/restore') else (3_000_000 if path == '/api/journal' else 4096)
+            if path.startswith('/api/restore'):
+                limit = 64_000_000
+            elif path == '/api/workspace':
+                limit = 200000
+            elif path == '/api/journal':
+                limit = 3_000_000
+            else:
+                limit = 4096
             if not 0 < size <= limit:
                 raise ValueError("Request is missing or too large.")
             data = json.loads(self.rfile.read(size))
@@ -642,6 +668,8 @@ class Handler(BaseHTTPRequestHandler):
                 status = 200
             elif path == "/api/body":
                 result, status = features.save_body(data, self.server.database), 201
+            elif path == "/api/workspace":
+                result, status = features.save_workspace(data, self.server.database), 200
             elif path == "/api/profile":
                 result, status = features.save_profile(data, self.server.database), 200
             elif path == "/api/calories":

@@ -68,6 +68,8 @@ function fillValues(set) {
 }
 
 function fillFromSavedSet(set) {
+  window.openSetEditor?.();
+  window.dispatchEvent(new Event("set-draft-replaced"));
   window.clearWorkoutContext?.();
   form.elements.activity_date.value = set.activity_date;
   form.elements.exercise.value = set.exercise;
@@ -82,6 +84,7 @@ function fillFromSavedSet(set) {
 }
 
 function selectExerciseForLog(name) {
+  window.openSetEditor?.();
   window.clearWorkoutContext?.();
   form.elements.exercise.value = name;
   const recent = recentSets.find((set) => set.exercise.toLowerCase() === name.toLowerCase());
@@ -91,6 +94,7 @@ function selectExerciseForLog(name) {
   }
   selectedRecentSet = recent ?? null;
   copyRecentValuesButton.hidden = !recent;
+  window.dispatchEvent(new Event("set-exercise-selected"));
   showSaveStatus(`${name} selected. Review or enter reps and load, then save.`);
   window.location.hash = "#log";
   requestAnimationFrame(() => form.elements.reps.focus());
@@ -98,15 +102,15 @@ function selectExerciseForLog(name) {
 
 function showRoute() {
   const raw = window.location.hash.slice(1) || "home";
-  const route = raw.startsWith("coming/") ? "coming" : raw;
-  const known = ["home", "log", "history", "body", "calories", "make", "exercises", "progress", "backup", "more", "coming", "daily", "workouts", "foods", "photos"];
+  const route = raw.startsWith("coming/") ? "coming" : raw.startsWith("page/") ? "page" : raw;
+  const known = ["home", "log", "history", "body", "calories", "make", "exercises", "progress", "backup", "more", "coming", "page", "daily", "workouts", "foods", "photos", "settings", "reminders"];
   const selected = known.includes(route) ? route : "home";
   for (const view of document.querySelectorAll("[data-view]")) view.hidden = view.dataset.view !== selected;
   if (selected === "coming") {
     const feature = raw.split("/")[1];
     document.querySelector("#coming-title").textContent = comingNames[feature] || "A new space";
   }
-  const mobileCurrent = ["home", "log", "history"].includes(selected) ? selected : "more";
+  const mobileCurrent = ["home", "log", "history", "page"].includes(selected) ? selected : "more";
   for (const link of document.querySelectorAll("[data-nav]")) {
     const active = link.dataset.nav === (link.closest(".mobile-nav") ? mobileCurrent : selected);
     if (active) link.setAttribute("aria-current", "page");
@@ -116,6 +120,56 @@ function showRoute() {
 }
 window.addEventListener("hashchange", showRoute);
 showRoute();
+
+const quickDialog = document.querySelector("#quick-add-dialog");
+const quickSearch = document.querySelector("#quick-add-search");
+const quickOptions = [...document.querySelectorAll("#quick-add-options button")];
+function filterQuickOptions() {
+  const query = quickSearch.value.trim().toLocaleLowerCase();
+  let visible = 0;
+  for (const option of quickOptions) {
+    option.hidden = !option.textContent.toLocaleLowerCase().includes(query);
+    if (!option.hidden) visible++;
+  }
+  document.querySelector("#quick-add-empty").hidden = visible !== 0;
+}
+function openQuickAdd() {
+  quickSearch.value = "";
+  filterQuickOptions();
+  if (!quickDialog.open) quickDialog.showModal();
+  quickSearch.focus();
+}
+for (const button of document.querySelectorAll("[data-quick-add]")) button.addEventListener("click", openQuickAdd);
+document.querySelector("#quick-add-close").addEventListener("click", () => quickDialog.close());
+quickSearch.addEventListener("input", filterQuickOptions);
+quickSearch.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    const first = quickOptions.find((option) => !option.hidden);
+    if (first) { event.preventDefault(); first.click(); }
+  } else if (event.key === "ArrowDown") {
+    const first = quickOptions.find((option) => !option.hidden);
+    if (first) { event.preventDefault(); first.focus(); }
+  }
+});
+for (const option of quickOptions) option.addEventListener("click", () => {
+  quickDialog.close();
+  if (option.dataset.quickRoute === "log") window.openSetEditor?.();
+  window.location.hash = `#${option.dataset.quickRoute}`;
+  showRoute();
+  if (option.dataset.quickRoute === "log") window.openSetEditor?.();
+  const target = document.querySelector(option.dataset.quickFocus);
+  if (option.hasAttribute("data-quick-voice")) target?.closest("details")?.setAttribute("open", "");
+  requestAnimationFrame(() => target?.focus());
+});
+quickDialog.addEventListener("click", (event) => {
+  if (event.target === quickDialog) quickDialog.close();
+});
+document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    if (quickDialog.open) quickDialog.close(); else openQuickAdd();
+  }
+});
 
 async function loadAccount() {
   try {
@@ -168,6 +222,7 @@ async function loadRecentExercises() {
       details.textContent = describeSet(set);
       button.append(name, details);
       button.addEventListener("click", () => {
+        selectExerciseForLog(set.exercise);
         form.elements.exercise.value = set.exercise;
         form.elements.unit.value = set.unit;
         form.elements.load_type.value = set.load_type;
@@ -252,7 +307,7 @@ function renderExercises() {
     allList.append(exerciseCard(item.exercise, `${item.set_count} ${item.set_count === 1 ? "set" : "sets"}${item.last_date ? ` · last dated ${item.last_date}` : " · created exercise"}`, favoriteKey.has(item.exercise.toLowerCase())));
   }
   document.querySelector("#favorites-status").textContent = favorites.length ? "" : "No favorites yet. Add one from your logged exercises.";
-  document.querySelector("#exercises-status").textContent = exercises.length ? `${exercises.length} ${exercises.length === 1 ? "exercise" : "exercises"} with records.` : "No exercises logged yet.";
+  document.querySelector("#exercises-status").textContent = exercises.length ? `${exercises.length} ${exercises.length === 1 ? "exercise" : "exercises"} available.` : "No exercises logged yet.";
   if (!favorites.length) shortcuts.textContent = "Add favorites from the Exercises page.";
 }
 
@@ -268,6 +323,7 @@ async function loadExercises() {
     refillSelect(historyFilter, "All recent sets", historyFilter.value);
     refillSelect(progressExercise, "Select an exercise", progressExercise.value);
     renderExercises();
+    window.dispatchEvent(new Event("exercise-library-loaded"));
   } catch {
     document.querySelector("#exercises-status").textContent = "Exercises could not be loaded. Try reloading the page.";
   }
@@ -371,7 +427,9 @@ document.querySelector("#refresh-button").addEventListener("click", loadHistory)
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  saveButton.disabled = true;
+  if (saveButton.disabled) return;
+  for (const button of form.querySelectorAll('button[type="submit"]')) button.disabled = true;
+  const keepValues = event.submitter?.dataset.keepValues === 'true';
   showSaveStatus("Saving…");
   const fields = new FormData(form);
   const set = {
@@ -404,16 +462,18 @@ form.addEventListener("submit", async (event) => {
     }
     lastSavedSet = result;
     window.dispatchEvent(new Event("records-changed"));
+
     lastSavedDetails.textContent = `${result.activity_date} · ${result.exercise} · ${describeSet(result)}`;
     lastSavedCard.hidden = false;
     showSaveStatus("Saved in this computer's database.", "success");
-    form.elements.reps.value = "";
-    form.elements.load.value = "";
+    form.elements.reps.value = keepValues ? result.reps : "";
+    form.elements.load.value = keepValues ? result.load ?? "" : "";
+    window.dispatchEvent(new CustomEvent("set-saved", { detail: { ...result, keepValues } }));
     await loadExercises();
     await Promise.all([loadHistory(), loadRecentExercises(), loadOverview(), loadProgress()]);
-    form.elements.reps.focus();
+    if (form.getClientRects().length) form.elements.reps.focus();
   } finally {
-    saveButton.disabled = false;
+    for (const button of form.querySelectorAll('button[type="submit"]')) button.disabled = false;
   }
 });
 
@@ -478,6 +538,7 @@ restoreButton.addEventListener("click", async () => {
     backupStatus.textContent = `Restored ${result.restored} sets and ${result.favorites_restored} favorites. All record types restored. Review History, Daily journal, Workouts, Food library, and Photos.`;
     await loadExercises();
     await Promise.all([loadHistory(), loadRecentExercises(), loadOverview(), loadProgress()]);
+    window.location.reload();
   } catch (error) {
     backupStatus.textContent = `Restore failed: ${error.message}`;
   }

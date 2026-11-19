@@ -4,11 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FitnessOS | Your space</title>
+  <script src="/appearance.js"></script>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
   <script src="/features.js" defer></script>
   <script src="/voice.js" defer></script>
   <script src="/journal.js" defer></script>
+  <script src="/workspace.js" defer></script>
+  <script src="/workspace_pages.js" defer></script>
+  <script src="/nutrition.js" defer></script>
+  <script src="/shell.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -17,28 +22,29 @@
       <p class="nav-label">Your space</p>
       <nav class="side-nav" aria-label="Main navigation">
         <a href="#home" data-nav="home">Overview</a><a href="#log" data-nav="log">Log a set</a><a href="#history" data-nav="history">History</a>
-        <a href="#body" data-nav="body">Body</a><a href="#calories" data-nav="calories">Calories</a><a href="#make" data-nav="make">Make</a>
+        <a href="#body" data-nav="body">Body</a><a href="#calories" data-nav="calories">Nutrition</a><a href="#make" data-nav="make">Make</a>
         <a href="#daily" data-nav="daily">Daily journal</a><a href="#workouts" data-nav="workouts">Workout sessions</a><a href="#foods" data-nav="foods">Food library</a><a href="#photos" data-nav="photos">Photos</a>
-        <a href="#exercises" data-nav="exercises">Exercises</a><a href="#progress" data-nav="progress">Progress</a><a href="#backup" data-nav="backup">Backup</a>
+        <a href="#exercises" data-nav="exercises">Exercises</a><a href="#progress" data-nav="progress">Progress</a><a href="#reminders" data-nav="reminders">Reminders</a><a href="#settings" data-nav="settings">Settings</a><a href="#backup" data-nav="backup">Backup</a>
       </nav>
       <p class="nav-label later-label">On the horizon</p>
       <nav class="side-nav" aria-label="Planned features">
-        <a href="#coming/cardio">Cardio &amp; sports</a><a href="#coming/nutrition">Detailed nutrition</a>
-        <a href="#coming/reminders">Reminders</a><a href="#log">Voice entry</a><a href="#coming/wearables">Wearables</a>
+        <a href="#coming/cardio">Cardio &amp; sports</a><a href="#log">Voice entry</a><a href="#coming/wearables">Wearables</a>
       </nav>
+      <button class="sidebar-quick" data-quick-add type="button">+ Quick add <kbd>Ctrl K</kbd></button>
       <button class="logout-button" data-logout type="button">Sign out</button>
     </aside>
     <div class="main-column">
-      <header class="topbar"><div class="mobile-brand">FitnessOS</div><span class="topbar-account">Signed in as <strong id="account-name">you</strong></span><button class="topbar-signout" data-logout type="button">Sign out</button></header>
+      <header class="topbar"><div class="mobile-brand">FitnessOS</div><nav id="location-trail" aria-label="Current location"></nav><button class="topbar-quick" data-quick-add type="button">+ Quick add <kbd>Ctrl K</kbd></button><span class="topbar-account">Signed in as <strong id="account-name">you</strong></span><button class="topbar-signout" data-logout type="button">Sign out</button></header>
       <main class="page">
         <section id="view-home" data-view="home" class="view">
           <div class="page-heading"><span class="eyebrow">Your space</span><h1>Move, record, return.</h1><p>Your records stay in this computer's database until you export a backup.</p></div>
           <div class="stat-grid"><div class="stat-card"><span>Sets logged</span><strong id="total-sets">—</strong></div><div class="stat-card"><span>Days with records</span><strong id="active-days">—</strong></div></div>
           <div class="home-grid">
             <section class="card"><div class="section-head"><h2>Pick up where you left off</h2><a class="inline-link" href="#log">Log a set</a></div><p id="overview-status" class="muted" role="status"></p><ul id="overview-list" class="compact-list"></ul></section>
-            <section class="card prompt-card"><span class="eyebrow">Quick start</span><h2>What will you record?</h2><p>Use a recent exercise, track body measurements or calories, or build a workout day.</p><div class="quick-links"><a class="primary-link" href="#log">Log a set</a><a class="secondary-button" href="#body">Body</a><a class="secondary-button" href="#calories">Calories</a><a class="secondary-button" href="#make">Make</a></div></section>
+            <section class="card prompt-card"><span class="eyebrow">Quick start</span><h2>What will you record?</h2><p>Open Quick add to jump straight to the right entry field.</p><div class="quick-links"><button class="primary-button" data-quick-add type="button">+ Quick add</button><a class="secondary-button" href="#workouts">Workouts</a></div></section>
           </div>
         </section>
+        <section id="view-page" data-view="page" class="view" hidden></section>
         <section id="view-log" data-view="log" class="view" hidden>
           <div class="page-heading"><span class="eyebrow">Strength</span><h1>Log a set</h1><p>One clear save at a time. Your draft stays in the form if the request fails.</p></div>
           <section class="card entry-card" aria-labelledby="entry-heading"><h2 id="entry-heading">New set</h2>
@@ -66,12 +72,12 @@
           <section class="card"><h2>Profile for estimates</h2><form id="profile-form"><label>Height in cm <input name="height_cm" type="number" min="1" max="300" step="any" inputmode="decimal" placeholder="Optional"></label><label>Age in years <small>(update as it changes)</small><input name="age_years" type="number" min="20" max="120" step="1" inputmode="numeric" placeholder="Optional"></label><label>Mifflin–St Jeor formula variant <select name="formula_variant"><option value="">No resting calorie estimate</option><option value="male">Male constant (+5)</option><option value="female">Female constant (−161)</option></select></label><button class="secondary-button" type="submit">Save profile</button><p id="profile-status" class="status" role="status"></p></form><p class="muted">BMI needs height and weight. The optional resting calorie estimate needs height, weight, a formula variant, and age 20–78 (the study's adult range). These are estimates, not diagnoses or eating targets.</p></section></div>
           <section class="card stacked-card"><h2>Recorded trends</h2><div id="body-stat-cards" class="stat-grid small-stats"></div><label for="body-trend-select">Trend</label><select id="body-trend-select"><option value="weight">Weight (kg)</option><option value="bmi">BMI (kg/m²)</option><option value="body_fat_pct">Logged body fat %</option><option value="waist">Waist (cm)</option><option value="chest">Chest (cm)</option><option value="hips">Hips (cm)</option><option value="arm">Arm (cm)</option><option value="thigh">Thigh (cm)</option></select><div id="body-trend-chart" class="trend-chart" role="img" aria-label="Body measurement trend"></div><p id="body-trend-status" class="muted" role="status"></p><h3>Recent entries</h3><ul id="body-list" class="compact-list"></ul><p class="muted">BMI is a screening calculation, not body-fat percentage. The Mifflin–St Jeor equation estimates resting energy expenditure; actual needs vary. <a href="https://www.cdc.gov/bmi/about/index.html" target="_blank" rel="noopener noreferrer">BMI source</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/2305711/" target="_blank" rel="noopener noreferrer">Resting-energy source</a></p></section>
         </section>
-        <section id="view-calories" data-view="calories" class="view" hidden><div class="page-heading"><span class="eyebrow">Food</span><h1>Calorie tracker</h1><p>Enter calories from a label or your own estimate. Daily totals include only logged entries.</p></div><section class="card"><form id="calorie-form"><label>Date <input name="activity_date" type="date" required></label><label>Meal time (optional) <input name="meal_time" type="time"></label><p><a class="inline-link" href="#foods">Log from your food library</a></p><label>Food or meal <input name="label" maxlength="80" required placeholder="e.g. Lunch"></label><label>Calories (kcal) <input name="kcal" type="number" min="0" max="20000" step="1" inputmode="numeric" required></label><button class="primary-button" type="submit">Save calorie entry</button><p id="calorie-save-status" class="status" role="status"></p></form></section><section class="card stacked-card"><h2>Logged intake</h2><p id="calorie-summary" class="muted"></p><div id="calorie-days" class="calorie-days"></div><ul id="calorie-list" class="compact-list"></ul></section></section>
+        <section id="view-calories" data-view="calories" class="view" hidden><div class="page-heading"><span class="eyebrow">Food</span><h1>Nutrition journal</h1><p>Enter calories from a label or your own estimate. Daily totals include only logged entries.</p></div><section class="card"><form id="calorie-form"><label>Date <input name="activity_date" type="date" required></label><label>Meal time (optional) <input name="meal_time" type="time"></label><p><a class="inline-link" href="#foods">Log from your food library</a></p><label>Food or meal <input name="label" maxlength="80" required placeholder="e.g. Lunch"></label><label>Calories (kcal) <input name="kcal" type="number" min="0" max="20000" step="1" inputmode="numeric" required></label><button class="primary-button" type="submit">Save calorie entry</button><p id="calorie-save-status" class="status" role="status"></p></form></section><section class="card stacked-card"><h2>Logged intake</h2><p id="calorie-summary" class="muted"></p><div id="calorie-days" class="calorie-days"></div><ul id="calorie-list" class="compact-list"></ul></section></section>
         <section id="view-make" data-view="make" class="view" hidden><div class="page-heading"><span class="eyebrow">Create</span><h1>Make your routine</h1><p>Create exercises, name a workout, add days such as Chest Day 1, then choose exercises for each day.</p></div><div class="two-column"><section class="card"><h2>Make an exercise</h2><form id="make-exercise-form"><label>Name <input name="name" maxlength="80" required placeholder="e.g. Incline press"></label><button class="secondary-button" type="submit">Create exercise</button></form><h2 class="subheading">Make a workout</h2><form id="make-workout-form"><label>Name <input name="name" maxlength="80" required placeholder="e.g. Four-day split"></label><button class="secondary-button" type="submit">Create workout</button></form></section><section class="card"><h2>Make a day</h2><form id="make-day-form"><label>Workout <select name="workout_id" id="make-workout-select" required></select></label><label>Day name <input name="name" maxlength="80" required placeholder="e.g. Chest Day 1"></label><button class="secondary-button" type="submit">Create day</button></form><h2 class="subheading">Add an exercise to a day</h2><form id="make-day-exercise-form"><label>Day <select name="day_id" id="make-day-select" required></select></label><label>Exercise <input name="exercise" list="exercise-suggestions" maxlength="80" required placeholder="Choose or type"></label><datalist id="exercise-suggestions"></datalist><button class="secondary-button" type="submit">Add to day</button></form></section></div><p id="make-status" class="status" role="status"></p><section class="card stacked-card"><h2>Your workouts</h2><div id="made-workouts"></div></section></section>
         <section id="view-exercises" data-view="exercises" class="view" hidden>
           <div class="page-heading"><span class="eyebrow">Library</span><h1>Exercises</h1><p>Keep your most used exercises close. Favorites are saved in this computer's database.</p></div>
           <section class="card"><h2>Favorites</h2><p id="favorites-status" class="muted" role="status"></p><div id="favorites-list" class="exercise-grid"></div></section>
-          <section class="card stacked-card"><h2>All logged exercises</h2><p id="exercises-status" class="muted" role="status"></p><div id="all-exercises-list" class="exercise-grid"></div></section>
+          <section class="card stacked-card"><h2>Exercise library</h2><p id="exercises-status" class="muted" role="status"></p><div id="all-exercises-list" class="exercise-grid"></div></section>
         </section>
         <section id="view-progress" data-view="progress" class="view" hidden>
           <div class="page-heading"><span class="eyebrow">Review</span><h1>Progress</h1><p>See what you recorded over time. These are logging patterns, not a measure of fitness improvement.</p></div>
@@ -83,16 +89,35 @@
         </section>
         <section id="view-more" data-view="more" class="view" hidden>
           <div class="page-heading"><span class="eyebrow">Explore</span><h1>More tools</h1><p>Open your current tools and see what is planned next.</p></div>
-          <div class="feature-grid"><a href="#daily" class="feature-card"><strong>Daily journal</strong><span>Water, sleep, steps, and feelings</span></a><a href="#workouts" class="feature-card"><strong>Workout sessions</strong><span>Record sets from a saved day</span></a><a href="#foods" class="feature-card"><strong>Food library</strong><span>Your foods and portions</span></a><a href="#photos" class="feature-card"><strong>Private photos</strong><span>Categories and calendar</span></a>
-            <a href="#exercises" class="feature-card"><strong>Exercises</strong><span>Favorites and logged movements</span></a><a href="#progress" class="feature-card"><strong>Progress</strong><span>Review recorded activity</span></a><a href="#backup" class="feature-card"><strong>Backup</strong><span>Export and recover records</span></a>
-            <a href="#make" class="feature-card"><strong>Make workouts</strong><span>Exercises and reusable days</span></a><a href="#body" class="feature-card"><strong>Body</strong><span>Measurements and trends</span></a><a href="#calories" class="feature-card"><strong>Calories</strong><span>Daily logged intake</span></a>
-            <a href="#coming/cardio" class="feature-card"><strong>Cardio &amp; sports</strong><span>Coming soon</span></a><a href="#coming/nutrition" class="feature-card"><strong>Detailed nutrition</strong><span>Coming soon</span></a><a href="#coming/reminders" class="feature-card"><strong>Reminders</strong><span>Coming soon</span></a><a href="#log" class="feature-card"><strong>Voice entry</strong><span>Prepare a set by voice</span></a><a href="#coming/wearables" class="feature-card"><strong>Wearables</strong><span>Coming soon</span></a>
+          <div class="feature-grid"><a href="#daily" class="feature-card"><strong>Daily journal</strong><span>Water, sleep, steps, and feelings</span></a><a href="#workouts" class="feature-card"><strong>Workout sessions</strong><span>Record sets from a saved day</span></a><a href="#foods" class="feature-card"><strong>Food library</strong><span>Foods, portions, and nutrients</span></a><a href="#photos" class="feature-card"><strong>Private photos</strong><span>Categories and calendar</span></a>
+            <a href="#exercises" class="feature-card"><strong>Exercises</strong><span>Favorites and common movements</span></a><a href="#progress" class="feature-card"><strong>Progress</strong><span>Review recorded activity</span></a><a href="#settings" class="feature-card"><strong>Settings</strong><span>Appearance and workspace</span></a><a href="#backup" class="feature-card"><strong>Backup</strong><span>Export and recover records</span></a>
+            <a href="#make" class="feature-card"><strong>Make workouts</strong><span>Exercises and reusable days</span></a><a href="#body" class="feature-card"><strong>Body</strong><span>Measurements and trends</span></a><a href="#calories" class="feature-card"><strong>Nutrition</strong><span>Daily logged intake</span></a>
+            <a href="#coming/cardio" class="feature-card"><strong>Cardio &amp; sports</strong><span>Coming soon</span></a><a href="#reminders" class="feature-card"><strong>Reminders</strong><span>Choose times and messages</span></a><a href="#log" class="feature-card"><strong>Voice entry</strong><span>Prepare a set by voice</span></a><a href="#coming/wearables" class="feature-card"><strong>Wearables</strong><span>Coming soon</span></a>
           </div>
         </section>
         <section id="view-coming" data-view="coming" class="view" hidden><div class="coming-card"><span class="eyebrow">On the horizon</span><h1 id="coming-title">A new space</h1><p>This feature is coming soon!</p><a class="primary-link" href="#home">Back to overview</a></div></section>
       </main>
-      <nav class="mobile-nav" aria-label="Mobile navigation"><a href="#home" data-nav="home">Home</a><a href="#log" data-nav="log">Log</a><a href="#history" data-nav="history">History</a><a href="#more" data-nav="more">More</a></nav>
+      <nav class="mobile-nav" aria-label="Mobile navigation"><a href="#home" data-nav="home">Home</a><a href="#log" data-nav="log">Log</a><a href="#history" data-nav="history">History</a><a href="#page/training" data-nav="page">Pages</a><a href="#more" data-nav="more">More</a></nav>
     </div>
   </div>
+  <dialog id="quick-add-dialog" class="quick-dialog" aria-labelledby="quick-add-title">
+    <div class="quick-dialog-head"><div><span class="eyebrow">Entry</span><h2 id="quick-add-title">Quick add</h2></div><button id="quick-add-close" type="button" aria-label="Close quick add">×</button></div>
+    <label class="sr-only" for="quick-add-search">Search entry types</label>
+    <input id="quick-add-search" type="search" autocomplete="off" placeholder="What would you like to record?">
+    <div id="quick-add-options" class="quick-options">
+      <button type="button" data-quick-route="log" data-quick-focus="#exercise"><strong>Strength set</strong><span>Exercise, reps, and load</span></button>
+      <button type="button" data-quick-route="workouts" data-quick-focus="#session-day"><strong>Start a workout</strong><span>Choose a saved day</span></button>
+      <button type="button" data-quick-route="foods" data-quick-focus="#food-select"><strong>Log a saved food</strong><span>Portions and meal time</span></button>
+      <button type="button" data-quick-route="foods" data-quick-focus="#food-form input[name=name]"><strong>Save a food</strong><span>Add to your personal library</span></button>
+      <button type="button" data-quick-route="calories" data-quick-focus="#calorie-form input[name=label]"><strong>Log calories</strong><span>Enter a food or meal manually</span></button>
+      <button type="button" data-quick-route="body" data-quick-focus="#body-form input[name=weight]"><strong>Body measurement</strong><span>Weight, waist, and more</span></button>
+      <button type="button" data-quick-route="daily" data-quick-focus="#water-form input[name=ml]"><strong>Water</strong><span>Record a drink</span></button>
+      <button type="button" data-quick-route="daily" data-quick-focus="#steps-form input[name=count]"><strong>Steps</strong><span>Daily total</span></button>
+      <button type="button" data-quick-route="daily" data-quick-focus="#checkin-form select[name=bloating]"><strong>Check-in</strong><span>Bloating, mood, and energy</span></button>
+      <button type="button" data-quick-route="log" data-quick-focus="#voice-text" data-quick-voice><strong>Voice draft</strong><span>Speak or type a strength set</span></button>
+    </div>
+    <p id="quick-add-empty" class="muted" hidden>No matching entry. Try a different search.</p>
+    <p class="quick-hint">Search, press Enter, or choose an entry. Esc closes.</p>
+  </dialog>
 </body>
 </html>

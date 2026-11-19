@@ -22,7 +22,7 @@
     const buttons = [...formNode.querySelectorAll('button')];
     buttons.forEach(button => button.disabled = true); status.textContent = 'Saving…';
     try {
-      await work(); status.textContent = "Saved in this computer's database.";
+      await work(); window.dispatchEvent(new Event('records-changed')); status.textContent = "Saved in this computer's database.";
       try { await after?.(); await refresh(); }
       catch { status.textContent = 'Saved, but the display could not refresh. Reload to review.'; }
     } catch (error) {
@@ -77,7 +77,7 @@
       if (row.kind === 'sleep') events.push([d.end.slice(11), `Sleep · ${d.minutes} minutes`, `${d.start.replace('T',' ')} → ${d.end.replace('T',' ')}`]);
       if (row.kind === 'workout') events.push([null, `Workout · ${d.name}`, d.status]);
     }
-    for (const row of data.calories) events.push([row.meal_time, `${row.label} · ${row.kcal} kcal`, 'Logged meal']);
+    for (const row of data.calories) events.push([row.meal_time, `${row.label} · ${row.kcal} kcal`, window.describeNutrition?.(row.nutrition) || 'Logged meal']);
     for (const row of data.sets) events.push([null, row.exercise, describeSet(row)]);
     for (const row of data.body) events.push([null, 'Body entry', [row.weight === null ? '' : `${row.weight} ${row.weight_unit}`, row.body_fat_pct === null ? '' : `${row.body_fat_pct}% body fat`].filter(Boolean).join(' · ') || 'Measurements recorded in History']);
     events.sort((a,b) => (a[0] || '99:99').localeCompare(b[0] || '99:99'));
@@ -155,6 +155,7 @@
     const row = rowsOf('food').find(row => row.id === $('#food-select').value);
     $('#food-description').textContent = row ? `${row.data.kcal} kcal per ${row.data.portion} · your entered value` : 'Save a food, then choose it here.';
     const portions = Number($('#food-log-form').elements.portions.value);
+    if(row) $('#food-description').textContent += ` · ${window.describeNutrition?.(row.data.nutrition) || ''}`;
     $('#food-calculation').textContent = row && portions > 0 ? `${Math.round(row.data.kcal * portions)} kcal for ${portions} portion(s)` : '';
   }
 
@@ -245,8 +246,8 @@
     for (const [value,y] of [[top,25],[bottom,165]]) {
       const text = document.createElementNS(ns,'text'); text.setAttribute('x','2'); text.setAttribute('y',String(y)); text.textContent = value.toFixed(1); svg.append(text);
     }
-    const line = document.createElementNS(ns,'polyline'); line.setAttribute('points',coords.map(p=>p.join(',')).join(' ')); line.setAttribute('fill','none'); line.setAttribute('stroke','#176b49'); line.setAttribute('stroke-width','3'); svg.append(line);
-    coords.forEach(([x,y],i) => { const dot = document.createElementNS(ns,'circle'); dot.setAttribute('cx',x); dot.setAttribute('cy',y); dot.setAttribute('r','4'); dot.setAttribute('fill','#176b49'); const tip = document.createElementNS(ns,'title'); tip.textContent=`${points[i].date}: ${points[i].value.toFixed(1)}`; dot.append(tip); svg.append(dot); });
+    const line = document.createElementNS(ns,'polyline'); line.setAttribute('points',coords.map(p=>p.join(',')).join(' ')); line.setAttribute('fill','none'); line.setAttribute('stroke','#252525'); line.setAttribute('stroke-width','3'); svg.append(line);
+    coords.forEach(([x,y],i) => { const dot = document.createElementNS(ns,'circle'); dot.setAttribute('cx',x); dot.setAttribute('cy',y); dot.setAttribute('r','4'); dot.setAttribute('fill','#252525'); const tip = document.createElementNS(ns,'title'); tip.textContent=`${points[i].date}: ${points[i].value.toFixed(1)}`; dot.append(tip); svg.append(dot); });
     container.append(svg, element('p', `${points[0].date} → ${points.at(-1).date}. Each point is one recorded entry; spacing is by entry, not elapsed time. Vertical scale ${bottom.toFixed(1)}–${top.toFixed(1)}.`, 'muted'));
   }
   let comparisonGeneration = 0;
@@ -291,6 +292,7 @@
       target.addEventListener('submit', event => { event.preventDefault(); submit(target, async () => {
         const data = fields(target); data.activity_date = kind === 'sleep' ? data.end.slice(0,10) : $('#journal-date').value;
         numeric(data, {water:['ml'], sleep:['quality'], checkin:['bloating','mood','energy'],steps:['count'],food:['kcal']}[kind]);
+        if (kind === 'food') data.nutrition = window.readNutritionFields?.(target);
         await save(kind,data);
       }, () => { if (kind === 'checkin') { target.reset(); target.elements.time.value = timeNow(); } if (kind === 'food') target.reset(); }); });
     }
@@ -305,7 +307,7 @@
     $('#food-log-form').addEventListener('submit', event => { event.preventDefault(); const target=event.currentTarget; submit(target, async () => {
       const data = fields(target), row = rowsOf('food').find(row=>row.id===data.food_id), portions=Number(data.portions);
       if (!row || !Number.isFinite(portions) || portions<=0 || portions>100) throw new Error('Choose a food and 0.01–100 portions.');
-      await postBackup('/api/calories', {activity_date:data.activity_date,meal_time:data.meal_time,label:`${row.data.name} (${portions} × ${row.data.portion})`,kcal:Math.round(portions*row.data.kcal)});
+      await postBackup('/api/calories', {activity_date:data.activity_date,meal_time:data.meal_time,label:`${row.data.name} (${portions} × ${row.data.portion})`,kcal:Math.round(portions*row.data.kcal), nutrition:window.scaleNutrition?.(row.data.nutrition, portions)});
     },loadCalories); });
     $('#photo-unlock-form').addEventListener('submit', async event => {
       event.preventDefault(); const target=event.currentTarget, button=target.querySelector('button'); button.disabled=true;
@@ -342,6 +344,7 @@
     }
     window.addEventListener('hashchange',()=>route().catch(showError));
     window.addEventListener('records-changed',()=>{refresh().catch(showError); if(location.hash==='#progress') compareStrength();});
+    window.dispatchEvent(new Event('journal-ready'));
     await route();
   }
   function showError(error) {

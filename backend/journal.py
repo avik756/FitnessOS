@@ -77,7 +77,8 @@ def validate(kind, data):
     if kind == 'food':
         return {'name': features.name(data.get('name'), 'a food name'),
                 'portion': features.name(data.get('portion'), 'a portion description'),
-                'kcal': integer(data.get('kcal'), 'Calories per portion', 0, 20000)}
+                'kcal': integer(data.get('kcal'), 'Calories per portion', 0, 20000),
+                'nutrition': features.validate_nutrition(data.get('nutrition'))}
     result = {'activity_date': features.valid_date(data.get('activity_date'))}
     if kind in ('water', 'checkin'):
         result['time'] = clock(data.get('time'))

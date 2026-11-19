@@ -45,8 +45,10 @@ if (typeof document !== 'undefined') {
   document.querySelector('#voice-parse').addEventListener('click', () => {
     try {
       const draft = parseSetCommand(input.value);
-      window.clearWorkoutContext?.();
+      if (draft.exercise.toLowerCase() !== form.elements.exercise.value.toLowerCase()) window.clearWorkoutContext?.();
+
       for (const [key, value] of Object.entries(draft)) if (value !== null) form.elements[key].value = value;
+      window.dispatchEvent(new Event('set-draft-replaced'));
       status.textContent = 'Draft prepared below. Check the date, exercise, reps, load, and total/per-hand choice, then use Save set.';
       showSaveStatus('Voice draft only. Review all fields before saving.');
     } catch (error) { status.textContent = error.message; }

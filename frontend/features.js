@@ -167,7 +167,7 @@ async function loadCalories() {
     for (const [day, total] of [...grouped].slice(0, 14)) days.append(card(day, `${total} kcal`));
     const list = document.querySelector("#calorie-list");
     list.replaceChildren();
-    for (const row of rows.slice(0, 30)) setTextRow(list, `${row.activity_date}${row.meal_time ? ` ${row.meal_time}` : ""} · ${row.label}`, `${row.kcal} kcal`);
+    for (const row of rows.slice(0, 30)) setTextRow(list, `${row.activity_date}${row.meal_time ? ` ${row.meal_time}` : ""} · ${row.label}`, `${row.kcal} kcal · ${window.describeNutrition?.(row.nutrition) || ""}`);
   } catch (error) {
     document.querySelector("#calorie-summary").textContent = error.message;
   }
@@ -177,9 +177,12 @@ calorieForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const values = Object.fromEntries(new FormData(calorieForm));
   values.kcal = Number(values.kcal);
+  values.nutrition = window.nutritionSnapshot?.();
   await saveFeature(calorieForm, "/api/calories", values, "#calorie-save-status", async () => {
     calorieForm.elements.label.value = "";
     calorieForm.elements.kcal.value = "";
+    for (const key of ["protein","carbs","fat","fiber","sugar","saturated_fat","sodium","calcium","iron","potassium","vitamin_c","vitamin_d"]) if (calorieForm.elements[key]) calorieForm.elements[key].value = "";
+    window.resetNutritionDraft?.();
     await loadCalories();
   });
 });
@@ -198,7 +201,7 @@ async function loadDay() {
     for (const [heading, rows, describe] of [
       ["Strength sets", data.sets, (row) => `${row.exercise} · ${describeSet(row)}`],
       ["Body entries", data.body, (row) => [row.weight === null ? null : `${row.weight} ${row.weight_unit}`, row.body_fat_pct === null ? null : `${row.body_fat_pct}% body fat`, ...["waist", "chest", "hips", "arm", "thigh"].filter((key) => row[key] !== null).map((key) => `${key} ${row[key]} ${row.measure_unit}`)].filter(Boolean).join(" · ")],
-      ["Calorie entries", data.calories, (row) => `${row.meal_time || "Time unknown"} · ${row.label} · ${row.kcal} kcal`],
+      ["Calorie entries", data.calories, (row) => `${row.meal_time || "Time unknown"} · ${row.label} · ${row.kcal} kcal · ${window.describeNutrition?.(row.nutrition) || ""}`],
     ]) {
       const section = document.createElement("section");
       const h = document.createElement("h3");

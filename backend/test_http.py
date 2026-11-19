@@ -98,12 +98,13 @@ class LocalHttpTests(unittest.TestCase):
         self.assertEqual((overview["set_count"], overview["active_days"]), (2, 1))
         with self.get("/api/exercises", cookie) as response:
             exercises = json.load(response)
-        self.assertEqual(len(exercises), 2)
+        self.assertEqual(len([row for row in exercises if row["set_count"]]), 2)
+        self.assertTrue(any(row["exercise"] == "Barbell bench press" for row in exercises))
         with self.post("/api/favorites", {"exercise": "Goblet squat", "favorite": True}, cookie) as response:
             self.assertEqual(json.load(response)["favorites"], ["Goblet squat"])
         with self.get("/api/export", cookie) as response:
             backup = json.load(response)
-        self.assertEqual(backup["version"], 4)
+        self.assertEqual(backup["version"], 5)
         self.assertEqual(len(backup["sets"]), 2)
         self.assertEqual(backup["favorites"], ["Goblet squat"])
         with self.post("/api/restore/preview", backup, cookie) as response:
@@ -178,6 +179,35 @@ class LocalHttpTests(unittest.TestCase):
             self.post('/api/journal', {'kind': 'steps', 'data': {'activity_date': '2026-11-10', 'count': -1}}, cookie)
         self.assertEqual(error.exception.code, 400)
         error.exception.close()
+
+
+    def test_workspace_and_food_nutrients_through_http_and_backup(self):
+        cookie, _ = self.setup_account()
+        layout = {'theme': 'dark', 'sections': [{'id': 'gym', 'title': 'Gym', 'route': 'workouts'}]}
+        with self.post('/api/workspace', layout, cookie) as response:
+            self.assertEqual(json.load(response), layout)
+        with self.get('/api/workspace', cookie) as response:
+            self.assertEqual(json.load(response), layout)
+        with self.assertRaises(HTTPError) as error:
+            self.post('/api/workspace', {'sections': [{'id':'bad','title':'Bad','parent':[]}]}, cookie)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        food = {'name':'Test oats','portion':'100 g','kcal':400,'nutrition':{'protein':10,'fiber':5,'source':'Test label'}}
+        with self.post('/api/journal', {'kind':'food','data':food}, cookie) as response:
+            saved = json.load(response)
+        self.assertEqual(saved['data']['nutrition']['protein'], 10)
+        with self.post('/api/calories', {'activity_date':'2026-11-18','label':'Half portion','kcal':200,
+                                        'nutrition':{'protein':5,'fiber':2.5,'source':'Test label'}}, cookie) as response:
+            self.assertEqual(json.loads(json.load(response)['nutrition'])['fiber'], 2.5)
+        with self.get('/api/day?date=2026-11-18',cookie) as response:
+            self.assertEqual(json.loads(json.load(response)['calories'][0]['nutrition'])['protein'], 5)
+        with self.get('/api/export',cookie) as response:
+            backup=json.load(response)
+        self.assertEqual(backup['workspace'],layout)
+        self.assertEqual(backup['journal'][0]['data']['nutrition']['protein'],10)
+        for asset in ['/appearance.js','/workspace.js','/nutrition.js']:
+            with self.get(asset) as response:
+                self.assertEqual(response.status,200)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,8 @@
 
 Run from `C:\FitnessOS` in PowerShell. Use a disposable database for manual checks so your own records stay untouched.
 
+For a screen-by-screen walkthrough of the current prototype, use [the manual test guide](MANUAL_TEST_GUIDE.md). The full frontend plan is not yet implemented.
+
 ## Automated checks after code changes
 
 ```powershell
@@ -11,6 +13,11 @@ node --check frontend/features.js
 node --check frontend/journal.js
 node --check frontend/voice.js
 node frontend/test_voice.cjs
+node frontend/test_set_save.cjs
+node --check frontend/workspace.js
+node --check frontend/workspace_pages.js
+node --check frontend/shell.js
+node --check frontend/nutrition.js
 git diff --check
 ```
 
@@ -33,6 +40,6 @@ The Python tests cover saving and reopening records, validation, old database co
 10. In Daily journal, add and undo water, save sleep crossing midnight, enter bloating zero with mood blank, and set a daily step total of zero then update it. Reload and compare the day view. Water reminders should only appear while this page stays open.
 11. Save a food and portion, then log a fractional number of portions with a meal time. Check the computed calories in Calories and the selected day's journal.
 12. On Photos, use a **synthetic test image**, save it under a custom category and confirm its calendar day. Lock the gallery; it should ask for the password and `/api/photos` should return HTTP 403. Re-enter the test password, then download a backup through Backup's separate photo-export unlock. The JSON is not encrypted; handle it accordingly.
-13. Restore the downloaded v4 backup into a fresh disposable database and compare workout links, meal times, journal entries and photo bytes. On Progress, select an exercise and check that the chart never mixes kg/lb or total/per-hand loads. On Log, prepare a voice or typed draft and confirm it changes fields without saving a set.
+13. Restore the downloaded current-format backup into a fresh disposable database and compare workout links, meal times, journal entries, photo bytes and workspace pages. On Progress, select an exercise and check that the chart never mixes kg/lb or total/per-hand loads. On Log, prepare a voice or typed draft and confirm it changes fields without saving a set.
 
 If a save times out or returns an unreadable response, check History before retrying so you do not create a duplicate. Keep meaningful personal records in the default database only after the backup and restore check succeeds.

@@ -1,6 +1,66 @@
 # Changelog
 
+## 2026-11-19 - Feedback implementation, first increment
+
+- Implemented a screenshot-informed dark shell with a lighter floating sidebar, compact top location trail, subdued cards/forms/Quick add, and quieter login copy. Added sidebar up/down order controls and Settings for theme, type and density. The navigation order and density use browser storage; theme and type retain the existing workspace save. Added local app-open reminders for time/day/message, quiet hours, pause/remove and supported preset/custom vibration, plus a compact Journal with one expanded editor at a time.
+- Expanded shared exercise suggestions from 24 to 75 and removed the misleading Detailed nutrition horizon entry. Registered the new shell JavaScript with the Python static server. These changes do not complete the planned whole-site block/view migration, durable closed-app reminders, or body mesh. Visual and real-phone review remain pending; storage tests and JS checks passed, while six HTTP tests still hit WinError 10013 in this environment.
+
+## 2026-11-19 - Screenshot reference added to frontend plan
+
+- Analyzed Avik's supplied Notion screenshot in `markdowns/FRONTEND_FEEDBACK_EXECUTION_PLAN.md` and refined the trial dark surfaces, type hierarchy, compact top bar, optional cover and columns. Distinguished the screenshot's edge-aligned/sans navigation from his separate floating/serif preferences. Documentation only; no frontend changes were implemented or visually verified.
+
+## 2026-11-19 - Hands-on feedback execution plan
+
+- Recorded Avik's visual and whole-site customization feedback, Settings, navigation, exercise expansion, illustrative body model and configurable non-ML reminders in `markdowns/FRONTEND_FEEDBACK_EXECUTION_PLAN.md`. Clarified existing nutrition scope and queued removal of its misleading horizon label. Updated current direction in AGENTS.md; no application code changed or new features claimed as implemented.
+
+## 2026-11-19 - Manual browser walkthrough
+
+- Added `markdowns/MANUAL_TEST_GUIDE.md` with a disposable-database setup, screen map, exact page-canvas and existing fitness flow checks, expected persistence/recovery behavior, and a clear list of planned capabilities that are not yet testable. This is a manual for reviewing the current prototype, not evidence that browser, microphone, phone or backup checks have been performed.
+
+## 2026-11-19 - Completion checklist
+
+- Added `missing.md` as a living checklist for the remaining product work, verification, three feedback/implementation rounds, real-phone trial, recovery and release. Already implemented prototype capabilities are checked separately from unverified behavior; optional future ideas do not block the first dependable release.
+
+## 2026-11-19 - First customizable page canvas
+
+- **Implemented:** Custom pages and subpages with stable `#page/<id>` routes, breadcrumbs, Home/sidebar navigation and a mobile page picker. Pages contain ordered nested sections, notes, headings, dividers, links to existing tools, quick actions and a live recent-set block. Blocks can be checkbox/rectangle selected and moved within or between pages through a destination dialog or up/down controls.
+- **Data/recovery:** The existing workspace JSON and backup now carry pages and blocks; the Python validator rejects missing parents, cycles, invalid types, cross-page child relationships and duplicate IDs. Older section links are used to seed pages without removing the original shortcuts.
+- **Scope:** This increment does not yet implement versioned conflict detection, general linked record views, canvas drag/drop, text formatting, undo, or broader voice intents. Visual and real-phone interactions are still pending direct validation.
+
+## 2026-11-19 - Frontend audit and master plan
+
+- Added `markdowns/frontend_master_document.md` at Avik's request: current-source inventory, requirement/gap mapping, official Notion research, proposed nested pages and content blocks, JavaScript function contracts, persistence/migration dependencies, and staged implementation and acceptance checks. Proposals are distinguished from implemented and accepted behavior; application code was not changed.
+- Audit verification: the voice parser and simulated set-save checks passed. Of 29 Python tests, 23 passed and six HTTP tests were blocked by local request socket permissions (`WinError 10013`). Browser app access timed out; visual, microphone, live food lookup and real-phone behavior were not verified in this audit.
+
+## 2026-11-18 - Integration corrections after review
+
+- Exercise catalogue now comes from the shared API and populates routine creation, entry suggestions, favourites and the exercise library. Built-ins carry zero recorded sets until logged.
+- Set popup and normal logger share the same save completion event. Removed timer-based value restoration and function replacement. All submit buttons lock during writes, failed saves keep drafts, repeat entry retains values, and recent/history/quick-add paths open the editor. Last-entered values use insertion order and stale lookups cannot overwrite a replaced draft.
+- Personal foods preserve nutrient data and portion logging scales it into meal snapshots. Database-selected portions can be saved to the personal library. Nutrient details appear in meal history and the daily journal, totals refresh after journal saves, and successful meal entry resets source/quantity state.
+- Appearance loads before first paint on both login and app pages. Existing calendars, auth, graphs and controls use the selected theme. Nutrition navigation now opens the implemented screen. Restore reloads the workspace/preferences, and validation rejects unsupported layout values and malformed parent/step settings.
+- Verification passed with 29 Python tests including HTTP integration, JavaScript syntax, voice parsing and save-handler regression scenarios. The in-app browser could not reach the local test server, so visual and microphone checks remain pending. Food lookup still requires USDA_API_KEY.
+
+
+## 2026-11-18 - Workspace, exercise editor and nutrition implementation
+
+- **Implemented:** Dark default styling, light mode, serif/sans/mono preferences, user-created nested section links, emoji and colour editing, collapse, sidebar links and breadcrumbs. Drag before another section to reorder, Shift-drag to nest, or select with checkboxes/rectangle and use Move selected. Layout changes persist through the Python workspace endpoint in SQLite.
+- **Implemented:** Dedicated set editor reuses the original form and save endpoint. Exercise suggestions include 24 common gym movements. Last-entered sets are fetched per unit and load convention. Four load buttons use a configurable step, default 2.5, remembered per exercise/unit and included in workspace backups. Save set closes with a confirmation; Save & add another retains reviewed values. Voice drafts remain editable inside the same editor and preserve the workout association.
+- **Implemented:** Calorie entries accept optional protein, carbohydrate, fat, fiber, sugar, saturated fat, sodium, calcium, iron, potassium and vitamins C/D. Values and source are stored with the entry. Daily totals show nutrient coverage and preserve unknown values for old calorie-only records. FoodData Central search and gram scaling require USDA_API_KEY on the server. Live lookup and coverage have not been verified here.
+- **Recovery:** Backup v5 adds workspace/preferences and nutrient snapshots. Restore accepts v1-v5. New regression checks cover round trips, unknown values, invalid nutrients and invalid nesting.
+- **Verification:** 23 storage/validation Python tests, JavaScript syntax checks and the voice parser checks pass. Five existing HTTP checks are blocked by WinError 10013 on localhost sockets. Browser interactions, microphone input and real-phone checks remain unverified.
+
+## 2026-11-18 - Local workspace and logging direction
+
+- Avik specified dark workspace styling, selectable and movable nested sections, emojis, a common exercise catalogue, a set-entry popup with adjustable load steps, and detailed nutrition. Planning precedes implementation.
+
 This file records semi-important and larger product changes, architecture choices, and decisions. Each entry describes what changed and why when that reason is known. It is a concise project record; Git history remains the place to inspect detailed code changes.
+
+## 2026-11-17 - Remaining localhost website direction
+
+- **Decision:** Avik's immediate two-day website window is for a black-and-white, Notion-like UI/UX overhaul focused on fast entry through pop-ups, dropdowns and other interactions; completing voice entry; and connecting a food database. Phone operation and final polish follow this implementation window. Hosting the full app remains a later task.
+- **Process:** Ship reviewable interface increments, enumerate every visible change (even small ones), let Avik test, and incorporate his specific feedback. Exact interaction details, full voice scope and food data source remain open.
+- **Implemented first increment:** Converted the local interface's color styling to monochrome, simplified the workspace shell, and added a searchable Quick add dialog. It opens existing entry screens and focuses their input fields; it does not save inside the dialog. The existing voice draft and personal food library are unchanged in capability.
+- **Verification:** JavaScript syntax and voice parser checks passed; 21 non-HTTP Python tests passed. Five HTTP tests could not bind their localhost sockets in this execution environment (WinError 10013). Avik's browser feedback on the new interactions is pending.
 
 ## 2026-11-17 - Static deployment preview
 
