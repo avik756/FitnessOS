@@ -2,7 +2,7 @@
 
 **Started 19 November 2026.** This is the working checklist for getting the app from a local prototype to an app Avik can use and trust on his phone. Check a box only when the behavior works, survives a reload, and has been reviewed where the item calls for feedback. A feature existing in source code is not the same as being tested and accepted.
 
-The project decisions in [AGENTS.md](AGENTS.md) take precedence. [The frontend master document](markdowns/frontend_master_document.md) explains the designs and implementation details behind many items here; [CHANGELOG.md](CHANGELOG.md) records what actually changed. Add or remove checklist items when the product scope changes. The **optional horizon** at the end does not block finishing the agreed app.
+The project decisions in [AGENTS.md](AGENTS.md) take precedence. [The frontend master document](markdowns/frontend_master_document.md) explains the designs and implementation details behind many items here; [the learning plan](markdowns/LEARNING_PLAN.md) covers Avik's current hand-coding approach; [CHANGELOG.md](CHANGELOG.md) records what actually changed. Add or remove checklist items when the product scope changes. The **optional horizon** at the end does not block finishing the agreed app.
 
 ## 0. Decide what “complete” means
 
@@ -22,12 +22,14 @@ Already built, though not all accepted or verified:
 - [x] Set logging, recent exercises, favourites, and a 75-exercise shared catalogue are implemented.
 - [x] First feedback increment: darker canvas/lighter sidebar, navigation order controls, breadcrumb bar, Settings, compact Journal, and app-open reminders are present in the working tree. Browser acceptance is still open.
 - [ ] Verify the new shell, Settings, Journal, enlarged catalogue and reminders in desktop and phone browsers; check both themes, direct URLs, Quick add, save/reload and existing flows.
-- [ ] Persist reminder schedules and navigation preferences with the user's recoverable data, with multi-tab behavior and clear save feedback. Browser-local storage alone is not backed up.
+- [x] Navigation order and density are now part of revision-checked SQLite workspace saves and backups (20 November).
+- [ ] Persist reminder schedules with recoverable data; reminders still use browser-local storage.
 - [ ] Implement reliable closed-app reminders if required: hosted scheduler and push, permission handling and actual phone support.
 - [ ] Finish user-configurable reminder patterns, quiet hours and snooze across supported browsers; measure delivery when the app is suspended.
 - [x] Saved routines/days, workout sessions, calendar history, body logs, calorie logs, personal foods, daily journal, progress photos, and guarded JSON backup/restore are implemented as prototype flows.
 - [x] Dark/light theme, basic font choices, existing section links, set-entry dialog and adjustable load buttons are implemented.
 - [x] Initial custom pages, subpages, nested blocks, selection, movement controls and recent-set block are implemented in the working tree.
+- [ ] Finish steps 2–4 review gate: use the new manual-test appendix to check layout migration on existing records, conflict/recovery in two tabs, working links and dialogs in all starter pages, and repeated workout/meal timing on a real browser. Code implementation and storage checks are complete; human acceptance is pending.
 - [ ] Open the current app in a browser and walk through **every** existing screen; log broken, confusing or inconsistent interactions.
 - [ ] Run all backend tests and frontend syntax/behavior checks in an environment where the HTTP tests can connect. Investigate any genuine failures; the last run here could not complete six HTTP tests because of `WinError 10013`.
 - [ ] Verify every script and dynamic screen loads successfully after login, including the newer page canvas and nutrition screens.
@@ -47,23 +49,27 @@ Already built, though not all accepted or verified:
 
 **Content blocks**
 
+- [x] Overview has a saved six-panel layout with direct drag placement, collapse/hide/restore, one/two columns, half/full-width panels and linked record views; tool panels show before/after drop previews (20 November). This needs browser and phone acceptance.
+- [ ] Try Overview layout editing in a desktop browser and on a real touch device: reorder statistics and workspace/page links, add a live view, hide/restore, reload, undo and restore an export. Confirm Quick start and the page links still work.
+- [ ] Validate panel-grip touch dragging, scroll behavior, placement line, Move up/down keyboard fallback and narrow-screen reading order in both themes.
+- [ ] Test custom-page block before/inside/after placement, including multiple selected blocks and invalid nesting; preview appearance and touch fallback need human review.
 - [ ] Test note, heading, divider, nested section, tool link, quick action, and recent-set blocks after save, reload, and restore.
 - [ ] Make adding/editing blocks fast: contextual insert menu, clear block-type controls, and comfortable editing of longer notes.
 - [ ] Make movement predictable: visible before/inside/after drop targets on desktop, plus explicit Move to, Move up and Move down controls that work on touch and keyboard.
 - [ ] Verify selecting a parent and child moves the subtree exactly once; reject moves into descendants and preserve the order of multiple selected blocks.
 - [ ] Refine region selection on the page canvas so ordinary clicks, text selection, scrolling and touch gestures are unaffected.
 - [ ] Support moving a block between pages without changing its underlying fitness records; verify page ancestry and child blocks after reload.
-- [ ] Add duplicate layout, reversible removal, and layout undo. Decide whether persistent trash and a retention period are required.
-- [ ] Decide whether two-column pages would improve real use. If added, stack them in a stable order on the phone.
+- [ ] Browser-verify implemented block/record-view duplication, reversible page/block/panel removal and session undo. Decide whether persistent trash and a retention period are required.
+- [ ] Browser-verify existing one/two-column custom pages at desktop and phone widths; check the reading order and decide whether they improve real use.
 - [ ] Decide if richer inline text formatting is useful after testing plain notes and headings; avoid letting an editor rewrite structured fitness data as prose.
 
 **Persistence and recovery**
 
-- [ ] Replace whole-workspace last-write-wins behavior with a revision-aware save contract so two open tabs cannot silently overwrite one another.
+- [x] Replace whole-workspace last-write-wins behavior with a revision-aware save contract; stale and legacy writes are rejected in automated checks (20 November).
 - [ ] Show Saving, Saved, Failed and uncertain outcomes accurately; provide retry while keeping the unsaved layout in view.
-- [ ] Make rapid edits, interrupted saves, reloads and two-tab conflicts recoverable.
-- [ ] Version the page/block schema and make migration from legacy section links repeat-safe and testable.
-- [ ] Include the new layout and preferences in backup validation, export and restore; verify older backup versions still work.
+- [ ] Browser-verify queued saves, same-tab draft recovery, conflict download/reapply and reload. Queue/conflict/undo behavior has automated coverage.
+- [ ] Browser-verify schema-v2 migration and once-only starter pages against an existing layout, including repeated reloads.
+- [x] Include layout and preferences in backup validation/export/restore; new and older backup storage tests pass (20 November).
 - [ ] Keep removing a page or view separate from deleting the actual workout, nutrition, body or journal records.
 
 ## 3. Make daily fitness entry feel finished
@@ -103,7 +109,8 @@ Already built, though not all accepted or verified:
 - [ ] Make exercise trends keep units and load conventions separate; show the underlying recorded values and distinguish entry spacing from elapsed time.
 - [ ] Make charts readable in both themes and on phones, with tables or text values available alongside them.
 - [ ] Review earlier proposed best-set and estimated-one-rep-max views. If implemented, show the calculation and limitations instead of presenting a prediction as fact.
-- [ ] Add pagination or bounded queries before years of records make repeated page blocks slow.
+- [x] Shared record views fetch eight records per page with stable cursor pagination and a shared invalidated query cache.
+- [ ] Measure long-history performance and browser behavior with many repeated views.
 
 ## 5. Feedback and polish rounds
 

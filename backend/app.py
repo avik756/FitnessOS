@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import hmac
+import ipaddress
 import json
 import secrets
 import sqlite3
@@ -33,7 +34,42 @@ REMEMBER_SECONDS = 30 * 24 * 60 * 60
 PASSWORD_ITERATIONS = 400_000
 
 
+def record_view(kind, database, before=None, exercise=''):
+    tables = {'sets': 'sets', 'meals': 'calorie_entries', 'body': 'body_entries',
+              'journal': 'journal', 'workouts': 'journal'}
+    if kind not in tables or len(exercise) > 80:
+        raise ValueError('Choose a supported record view.')
+    if before is not None:
+        try:
+            before = int(before)
+        except (ValueError, TypeError):
+            raise ValueError('Invalid record cursor.') from None
+        if before <= 0 or before > 2**63 - 1:
+            raise ValueError('Invalid record cursor.')
+    clauses, values = [], []
+    if before is not None:
+        clauses.append('rowid < ?')
+        values.append(before)
+    if kind == 'sets' and exercise:
+        clauses.append('exercise = ? COLLATE NOCASE')
+        values.append(exercise)
+    if kind in ('journal', 'workouts'):
+        clauses.append("kind IN ('water','sleep','steps','checkin') AND (kind != 'water' OR COALESCE(json_extract(data, '$.undone'), 0) = 0)" if kind == 'journal' else "kind = 'workout'")
+    where = ' WHERE ' + ' AND '.join(clauses) if clauses else ''
+    with closing(connect(database)) as connection:
+        rows = [dict(row) for row in connection.execute(
+            f'SELECT rowid AS cursor, * FROM {tables[kind]}{where} ORDER BY rowid DESC LIMIT 9', values)]
+    more = len(rows) > 8
+    rows = rows[:8]
+    for row in rows:
+        if kind in ('journal', 'workouts'):
+            row['data'] = json.loads(row['data'])
+    return {'rows': rows, 'next_cursor': rows[-1]['cursor'] if more else None}
+
+
 def connect(database=DATABASE):
+    if hasattr(database, 'connect'):
+        return database.connect()
     database.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(database)
     connection.row_factory = sqlite3.Row
@@ -69,6 +105,9 @@ def connect(database=DATABASE):
             exercise TEXT PRIMARY KEY COLLATE NOCASE
         )
     """)
+    connection.execute("""CREATE TABLE IF NOT EXISTS set_requests (
+        request_id TEXT PRIMARY KEY, payload TEXT NOT NULL, result TEXT NOT NULL
+    )""")
     features.ensure_schema(connection)
     journal.ensure_schema(connection)
     for table, column, declaration in [('sets', 'session_id', 'TEXT'),
@@ -146,12 +185,16 @@ def get_session(token, database=DATABASE):
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     with closing(connect(database)) as connection:
         row = connection.execute(
-            """SELECT account.name, sessions.remembered FROM sessions
+            """SELECT account.name, account.salt, sessions.remembered FROM sessions
                JOIN account ON account.id = 1
                WHERE sessions.token_hash = ? AND sessions.expires_at > ?""",
             (token_hash, int(time())),
         ).fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    user = dict(row)
+    user['draft_scope'] = hashlib.sha256(user.pop('salt')).hexdigest()
+    return user
 
 
 def logout_account(token, database=DATABASE):
@@ -239,12 +282,22 @@ def validate_set(data):
     return (activity_date, exercise.strip(), reps, load, unit, load_type, session_id, position)
 
 
-def save_set(data, database=DATABASE):
+def save_set(data, database=DATABASE, request_id=None):
     values = validate_set(data)
+    if request_id is not None and (not isinstance(request_id, str) or
+            not 16 <= len(request_id) <= 100 or not all(c.isascii() and (c.isalnum() or c == '-') for c in request_id)):
+        raise ValueError('Invalid save request ID.')
+    payload = json.dumps(values)
     created_at = datetime.now(timezone.utc).isoformat()
     with closing(connect(database)) as connection:
         with connection:
             connection.execute('BEGIN IMMEDIATE')
+            if request_id:
+                previous = connection.execute('SELECT payload, result FROM set_requests WHERE request_id = ?', (request_id,)).fetchone()
+                if previous:
+                    if previous['payload'] != payload:
+                        raise ValueError('This save request was already used for different values. Check History before saving a new set.')
+                    return json.loads(previous['result'])
             if values[6]:
                 session = journal.get_entry(connection, values[6], 'workout')
                 if (session['status'] != 'active' or session['activity_date'] != values[0]
@@ -257,6 +310,9 @@ def save_set(data, database=DATABASE):
                 (*values, created_at),
             )
             row = connection.execute("SELECT * FROM sets WHERE id = ?", (cursor.lastrowid,)).fetchone()
+            if request_id:
+                connection.execute('INSERT INTO set_requests VALUES (?, ?, ?)',
+                                   (request_id, payload, json.dumps(dict(row))))
     return dict(row)  # The transaction has committed before success is returned.
 
 
@@ -448,7 +504,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def valid_host(self):
         port = self.server.server_port
-        return self.headers.get("Host") in (f"127.0.0.1:{port}", f"localhost:{port}")
+        hosts = getattr(self.server, 'allowed_hosts', (f"127.0.0.1:{port}", f"localhost:{port}"))
+        return self.headers.get("Host") in hosts
+
+    def valid_origin(self):
+        # This server is for direct local HTTP, not a trusted reverse proxy.
+        # Never trust forwarded headers to change its origin policy.
+        return self.valid_host() and self.headers.get('Origin', f"http://{self.headers.get('Host')}") == f"http://{self.headers.get('Host')}"
 
     def session_token(self):
         cookie = SimpleCookie()
@@ -501,6 +563,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"setup_required": not account_exists(self.server.database),
                                      "authenticated": user is not None,
                                      "name": user["name"] if user else None,
+                                     "draft_scope": user['draft_scope'] if user else None,
                                      "remembered": bool(user["remembered"]) if user else False})
                 return
             if path == "/":
@@ -516,7 +579,20 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_bytes(200, (STATIC / "login.html").read_bytes(), "text/html; charset=utf-8")
                 return
             files = {
+                '/mobile.css': ('mobile.css', 'text/css; charset=utf-8'),
+                '/mobile.js': ('mobile.js', 'text/javascript; charset=utf-8'),
+                '/draft_store.js': ('draft_store.js', 'text/javascript; charset=utf-8'),
+                '/pwa.js': ('pwa.js', 'text/javascript; charset=utf-8'),
+                '/sw.js': ('sw.js', 'text/javascript; charset=utf-8'),
+                '/offline.html': ('offline.html', 'text/html; charset=utf-8'),
+                '/manifest.webmanifest': ('manifest.webmanifest', 'application/manifest+json'),
+                '/icons/icon-192.png': ('icons/icon-192.png', 'image/png'),
+                '/icons/icon-512.png': ('icons/icon-512.png', 'image/png'),
                 "/appearance.js": ("appearance.js", "text/javascript; charset=utf-8"),
+                "/record_views.js": ("record_views.js", "text/javascript; charset=utf-8"),
+                "/workspace_store.js": ("workspace_store.js", "text/javascript; charset=utf-8"),
+                "/entry_experience.js": ("entry_experience.js", "text/javascript; charset=utf-8"),
+                "/screen_layouts.js": ("screen_layouts.js", "text/javascript; charset=utf-8"),
                 "/workspace.js": ("workspace.js", "text/javascript; charset=utf-8"),
                 "/workspace_pages.js": ("workspace_pages.js", "text/javascript; charset=utf-8"),
                 "/shell.js": ("shell.js", "text/javascript; charset=utf-8"),
@@ -539,15 +615,20 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     self.journal_get(path, parsed)
                 return
-            if path not in ("/api/sets", "/api/recent-exercises", "/api/exercises", "/api/overview",
+            if path not in ("/api/record-view", "/api/sets", "/api/recent-exercises", "/api/exercises", "/api/overview",
                             "/api/favorites", "/api/export", "/api/body", "/api/body/stats", "/api/profile",
-                            "/api/workspace", "/api/food-search", "/api/calories", "/api/make", "/api/calendar", "/api/day"):
+                            "/api/workspace", "/api/workspace/state", "/api/food-search", "/api/calories", "/api/make", "/api/calendar", "/api/day"):
                 self.send_json(404, {"error": "Not found."})
                 return
             if not user:
                 self.send_json(401, {"error": "Sign in to continue."})
                 return
-            if path == "/api/workspace":
+            if path == "/api/record-view":
+                query = parse_qs(parsed.query)
+                self.send_json(200, record_view(query.get("kind", [""])[0], self.server.database, query.get("before", [None])[0], query.get("exercise", [""])[0]))
+            elif path == "/api/workspace/state":
+                self.send_json(200, features.workspace_state(self.server.database))
+            elif path == "/api/workspace":
                 self.send_json(200, features.get_workspace(self.server.database))
             elif path == "/api/food-search":
                 try:
@@ -595,13 +676,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(500, {"error": "Could not load local data. Try again."})
 
     def do_POST(self):
-        if not self.valid_host() or self.headers.get("Origin", f"http://{self.headers.get('Host')}") != f"http://{self.headers.get('Host')}":
+        if not self.valid_origin():
             self.send_json(403, {"error": "Invalid local origin."})
             return
         path = urlsplit(self.path).path
         if path not in ("/api/auth/setup", "/api/auth/login", "/api/auth/logout", "/api/sets",
                         "/api/favorites", "/api/restore/preview", "/api/restore", "/api/body",
-                        "/api/workspace", "/api/profile", "/api/calories", "/api/make/exercise", "/api/make/workout",
+                        "/api/workspace", "/api/workspace/state", "/api/profile", "/api/calories", "/api/make/exercise", "/api/make/workout",
                         "/api/make/day", "/api/make/day-exercise", '/api/journal', '/api/water/undo',
                         '/api/workouts/start', '/api/workouts/finish', '/api/photos/unlock', '/api/photos/lock'):
             self.send_json(404, {"error": "Not found."})
@@ -613,7 +694,7 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers.get("Content-Length", "0"))
             if path.startswith('/api/restore'):
                 limit = 64_000_000
-            elif path == '/api/workspace':
+            elif path in ('/api/workspace', '/api/workspace/state'):
                 limit = 200000
             elif path == '/api/journal':
                 limit = 3_000_000
@@ -623,6 +704,9 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Request is missing or too large.")
             data = json.loads(self.rfile.read(size))
             if path in ("/api/auth/setup", "/api/auth/login"):
+                if path.endswith('setup') and self.client_address[0] not in ('127.0.0.1', '::1'):
+                    self.send_json(403, {'error': 'Create the local account on the laptop first.'})
+                    return
                 name, token, remember = (create_account(data, self.server.database)
                                          if path.endswith("setup") else login_account(data, self.server.database))
                 self.send_json(201 if path.endswith("setup") else 200, {"name": name},
@@ -661,13 +745,19 @@ class Handler(BaseHTTPRequestHandler):
                     result = journal.update_state(self.server.database, data['id'], 'water' if path.startswith('/api/water') else 'workout')
                 status = 200
             elif path == "/api/sets":
-                result = save_set(data, self.server.database)
+                result = save_set(data, self.server.database, self.headers.get('Idempotency-Key'))
                 status = 201
             elif path == "/api/favorites":
                 result = set_favorite(data, self.server.database)
                 status = 200
             elif path == "/api/body":
                 result, status = features.save_body(data, self.server.database), 201
+            elif path == "/api/workspace/state":
+                try:
+                    result, status = features.save_workspace_state(data, self.server.database), 200
+                except features.WorkspaceConflict as error:
+                    self.send_json(409, {'error': str(error)})
+                    return
             elif path == "/api/workspace":
                 result, status = features.save_workspace(data, self.server.database), 200
             elif path == "/api/profile":
@@ -696,10 +786,25 @@ def main():
     parser = argparse.ArgumentParser(description="Run the local FitnessOS app.")
     parser.add_argument("--database", type=Path, default=DATABASE, help="SQLite database file")
     parser.add_argument("--port", type=int, default=8000, help="localhost port (default: 8000)")
+    parser.add_argument('--lan-address', help='Optional private IPv4 address of this laptop for LAN demo testing')
     args = parser.parse_args()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    if args.lan_address:
+        try:
+            address = ipaddress.IPv4Address(args.lan_address)
+            if not address.is_private or address.is_loopback or address.is_unspecified or address.is_link_local:
+                raise ValueError()
+        except ValueError:
+            parser.error('--lan-address must be the laptop\'s private IPv4 address')
+        if not account_exists(args.database):
+            parser.error('Create an account locally before enabling LAN access. Use the fictional demo database for phone testing.')
+    server = ThreadingHTTPServer((args.lan_address or "127.0.0.1", args.port), Handler)
+    server.allowed_hosts = {f'127.0.0.1:{server.server_port}', f'localhost:{server.server_port}'}
+    if args.lan_address:
+        server.allowed_hosts.add(f'{args.lan_address}:{server.server_port}')
     server.database = args.database
-    print(f"FitnessOS local app: http://127.0.0.1:{args.port}")
+    print(f"FitnessOS local app: http://{args.lan_address or '127.0.0.1'}:{server.server_port}")
+    if args.lan_address:
+        print('LAN demo mode: use fictional records on a trusted network. HTTP does not enable PWA installation.')
     print("Press Ctrl+C to stop. Export and test a backup before relying on saved records.")
     try:
         server.serve_forever()

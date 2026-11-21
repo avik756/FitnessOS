@@ -23,6 +23,8 @@ def ensure_schema(connection):
 
 
 def db(database):
+    if hasattr(database, 'connect'):
+        return database.connect()
     connection = sqlite3.connect(database)
     connection.row_factory = sqlite3.Row
     ensure_schema(connection)

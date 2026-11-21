@@ -141,3 +141,8 @@ Technical references checked for feasibility: [MDN Vibration API](https://develo
 7. **Feedback rounds:** first appearance/navigation; second real workout/meals/journal; third actual phone and reminders; implement and retest each round. Carry unresolved usability and data-loss issues forward rather than declaring completion by round count.
 
 For each batch record every user-visible change, backend/JS checks, manual browser outcomes and unverified device behavior. Update MANUAL_TEST_GUIDE.md and missing.md only as work is implemented and reviewed. Do not mark this plan complete merely because these items are written down.
+
+
+## Implementation status — 20 November 2026
+
+Execution steps 2–4 now have a working implementation: revision-aware layout persistence/recovery, live composable panels and shared record views, plus focused entry flows. This does not mark their review gates complete. The main tools preserve their existing form controllers; reusable record views share a renderer with custom pages. Form duplication is deliberately replaced by shared entry points to avoid competing unsaved drafts. Optional media/covers and a complete arbitrary nested-form canvas remain outside this increment. See the steps 2–4 appendix in MANUAL_TEST_GUIDE.md for each control and failure check; browser/phone review and before/after timing measurements are pending.

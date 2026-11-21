@@ -46,6 +46,7 @@ function drawAdjustments() {
       }
       exerciseRequest++;
       input.value = Number(value.toFixed(4));
+      input.dispatchEvent(new Event('input', {bubbles:true}));
       document.querySelector('#adjust-status').textContent = `Draft load ${input.value} ${form.elements.unit.value}.`;
     });
     group.append(button);
@@ -74,6 +75,7 @@ async function prefillLastSet() {
     form.elements.reps.value = row?.reps ?? '';
     form.elements.load.value = row?.load ?? '';
   } catch { lastValue.textContent = 'Previous set unavailable. Enter values manually.'; }
+  form.dispatchEvent(new Event('input', {bubbles:true}));
 }
 for (const input of [form.elements.exercise, form.elements.reps, form.elements.load]) input.addEventListener('input', () => { exerciseRequest++; });
 form.elements.exercise.addEventListener('change', prefillLastSet);
@@ -103,6 +105,10 @@ const addAnother = document.createElement('button');
 addAnother.type = 'submit'; addAnother.className = 'secondary-button'; addAnother.textContent = 'Save & add another';
 addAnother.dataset.keepValues = 'true';
 saveButton.after(addAnother);
+const reviewPending = document.createElement('button');
+reviewPending.type='button';reviewPending.className='text-button';reviewPending.textContent='Review pending set';
+reviewPending.onclick=()=>window.FitnessDrafts?.reviewPending(form);
+addAnother.after(reviewPending);
 window.addEventListener('set-saved', event => {
   exerciseRequest++;
   if (!setEditor.open) return;
@@ -123,14 +129,17 @@ document.addEventListener('click', event => {
 window.addEventListener('hashchange', () => { if (location.hash === '#log') openSetEditor(); });
 if (location.hash === '#log') openSetEditor();
 (async function workspaceLayout() {
-  let state = await readFeature('/api/workspace');
+  if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
+  const loaded = await readFeature('/api/workspace/state');
+  let state = loaded.workspace;
+  const needsMigration = state.schema_version !== 2;
+  state.schema_version = 2;
   if (!state.sections) state = {...state,theme:'dark',font:'serif',sections:[{id:'training',title:'Training',emoji:'🏋️',route:'workouts'},{id:'nutrition',title:'Nutrition',emoji:'🥣',route:'calories'},{id:'journal',title:'Journal',emoji:'📓',route:'daily'}]};
   window.workspaceSteps = state.steps || {};
   window.saveLoadStep = (key,value) => { state.steps = window.workspaceSteps; state.steps[key]=value; persist(); };
   refreshStep();
   let selected = new Set();
-  let saving = Promise.resolve();
-  let changeNumber = 0;
+
   const panel = document.createElement('section'); panel.className = 'card stacked-card workspace-layout';
   panel.innerHTML = `<div class="section-head"><h2>Your workspace</h2><button type="button" id="new-section" class="secondary-button">+ Section</button></div><div class="quick-links"><label>Appearance<select id="workspace-theme"><option value="dark">Dark</option><option value="light">Light</option></select></label><label>Type<select id="workspace-font"><option value="serif">Serif</option><option value="sans">Sans</option><option value="mono">Mono</option></select></label><button type="button" id="move-sections" class="secondary-button">Move selected</button></div><p id="layout-status" class="status" role="status"></p><div id="section-tree"></div>`;
   document.querySelector('#view-home').append(panel);
@@ -147,13 +156,18 @@ if (location.hash === '#log') openSetEditor();
     document.documentElement.dataset.font = font.value;
     try { localStorage.setItem('fitnessos-appearance',JSON.stringify({theme:theme.value,font:font.value,density:document.documentElement.dataset.density||'comfortable'})); } catch {}
   }
+  const store = window.createWorkspaceStore(state, loaded.revision, snapshot => {
+    for (const key of Object.keys(state)) delete state[key];
+    Object.assign(state,snapshot);
+    theme.value=state.theme||'dark';font.value=state.font||'serif';
+    window.workspaceSteps=state.steps||{};window.fitnessPages=state.pages||[];
+    appearance();render();refreshStep();
+    window.dispatchEvent(new Event('workspace-reset'));
+  });
   function persist() {
-    state.theme=theme.value; state.font=font.value; appearance();
-    const snapshot=JSON.parse(JSON.stringify(state));
-    const version=++changeNumber;
-    status.textContent='Saving workspace…';
-    saving=saving.catch(()=>{}).then(()=>postBackup('/api/workspace',snapshot)).then(()=>{if(version===changeNumber)status.textContent='Workspace saved.';}).catch(error=>{status.textContent=`${error.message} Layout remains in this page. Try another change to save again.`;});
+    state.theme=theme.value;state.font=font.value;appearance();store.save();
   }
+  window.fitnessWorkspace={state,persist};
   for (const input of [theme,font]) input.addEventListener('change',persist);
   function isDescendant(identity, parent) {
     while (parent) {
@@ -230,7 +244,7 @@ if (location.hash === '#log') openSetEditor();
   }
   // Rectangle selection begins only in blank workspace space, never over text or controls.
   tree.addEventListener('pointerdown',event=>{
-    if(event.target!==tree || event.button!==0) return;
+    if(event.target!==tree || event.button!==0 || event.pointerType==='touch' || event.pointerType==='pen') return;
     const start={x:event.clientX,y:event.clientY};const rectangle=document.createElement('div');rectangle.className='selection-rectangle';document.body.append(rectangle);
     tree.setPointerCapture(event.pointerId);selected.clear();
     const update=event=>{
@@ -247,7 +261,8 @@ if (location.hash === '#log') openSetEditor();
   });
   appearance();render();
   window.dispatchEvent(new CustomEvent('workspace-ready',{detail:{state,persist}}));
-  if (!Object.keys(await readFeature('/api/workspace')).length) persist();
+  store.checkpoint();
+  if (needsMigration) persist();
 })().catch(error=>{showSaveStatus(`Workspace could not load: ${error.message}`,'error');});
 
 const savedToast=document.createElement('p');savedToast.className='saved-toast';savedToast.setAttribute('role','status');savedToast.hidden=true;document.body.append(savedToast);

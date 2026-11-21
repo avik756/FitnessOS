@@ -20,8 +20,16 @@ window.addEventListener('workspace-ready', ({detail:{state,persist}}) => {
     persist();
   }
   state.blocks ||= [];
+  if(!state.starter_views_v2){
+    for(const [key,title,kind,route] of [['training','Training','workouts','workouts'],['history','History','sets','history'],['nutrition','Nutrition','meals','calories'],['journal','Journal','journal','daily'],['body','Body','body','body']]){
+      let page=state.pages.find(p=>p.id===key);
+      if(!page){page={id:key,title,emoji:'',parent:null};state.pages.push(page);}
+      if(!state.blocks.some(b=>b.page===page.id&&b.kind===kind))state.blocks.push({id:id(),page:page.id,parent:null,kind,title});
+      if(!state.blocks.some(b=>b.page===page.id&&b.route===route))state.blocks.push({id:id(),page:page.id,parent:null,kind:'tool',route,title:'Open '+title});
+    }state.starter_views_v2=true;persist();
+  }
   window.fitnessPages = state.pages;
-  let selected=new Set();
+  let selected=new Set();let editingBlocks=false;
   let request=0;
   let lastRoute='';
   const pageFor = () => {
@@ -87,7 +95,7 @@ window.addEventListener('workspace-ready', ({detail:{state,persist}}) => {
     return false;
   }
   const blockDialog=document.createElement('dialog');blockDialog.className='quick-dialog page-edit-dialog';
-  blockDialog.innerHTML='<form class="section-editor"><h2>Content block</h2><label>Type<select name="kind"><option value="text">Note</option><option value="heading">Heading</option><option value="section">Section</option><option value="divider">Divider</option><option value="sets">Set history</option><option value="tool">Tool link</option><option value="action">Quick action</option></select></label><label>Title<input name="title" maxlength="80"></label><label>Text<textarea name="text" maxlength="4000"></textarea></label><label>Exercise filter (blank means all)<input name="exercise" maxlength="80"></label><label>Tool<select name="route"></select></label><label>Inside section<select name="parent"></select></label><div class="quick-links"><button class="primary-button">Save block</button><button type="button" class="secondary-button" data-cancel>Cancel</button></div></form>';
+  blockDialog.innerHTML='<form class="section-editor"><h2>Content block</h2><label>Type<select name="kind"><option value="text">Note</option><option value="heading">Heading</option><option value="section">Section</option><option value="divider">Divider</option><option value="sets">Set history</option><option value="meals">Meals</option><option value="body">Body records</option><option value="journal">Journal entries</option><option value="workouts">Workout sessions</option><option value="tool">Tool link</option><option value="action">Quick action</option></select></label><label>Title<input name="title" maxlength="80"></label><label>Text<textarea name="text" maxlength="4000"></textarea></label><label>Exercise filter (blank means all)<input name="exercise" maxlength="80"></label><label>Tool<select name="route"></select></label><label>Inside section<select name="parent"></select></label><div class="quick-links"><button class="primary-button">Save block</button><button type="button" class="secondary-button" data-cancel>Cancel</button></div></form>';
   document.body.append(blockDialog);blockDialog.querySelector('[data-cancel]').onclick=()=>blockDialog.close();
   for(const [route,label] of Object.entries(routes))blockDialog.querySelector('[name=route]').add(new Option(label,route));
   const routeField=blockDialog.querySelector('[name=route]');
@@ -159,12 +167,55 @@ window.addEventListener('workspace-ready', ({detail:{state,persist}}) => {
     wrap.style.setProperty('--depth',String(Math.min(depth,5)));
     wrap.classList.toggle('selected',selected.has(block.id));
     const toolbar=document.createElement('div');toolbar.className='block-toolbar';
+    toolbar.draggable=true;toolbar.setAttribute('aria-label',`Drag ${block.title||block.kind} to move`);
+    toolbar.addEventListener('dragstart',event=>{
+      if(!editingBlocks){event.preventDefault();return;}
+      event.stopPropagation();event.dataTransfer.effectAllowed='move';
+      event.dataTransfer.setData('application/x-fitnessos-blocks',JSON.stringify(selected.has(block.id)?[...selected]:[block.id]));
+    });
+    toolbar.addEventListener('dragend',()=>root.querySelectorAll('.page-block.drop-target').forEach(node=>{
+      node.classList.remove('drop-target');delete node.dataset.dropPosition;
+    }));
+    const dropPosition=event=>{
+      if(event.shiftKey&&block.kind==='section')return 'inside';
+      const rect=wrap.getBoundingClientRect(),fraction=(event.clientY-rect.top)/rect.height;
+      if(block.kind==='section'&&fraction>.35&&fraction<.65)return 'inside';
+      return fraction<.5?'before':'after';
+    };
+    wrap.addEventListener('dragover',event=>{
+      if(!editingBlocks||!event.dataTransfer.types.includes('application/x-fitnessos-blocks'))return;
+      event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect='move';
+      wrap.classList.add('drop-target');wrap.dataset.dropPosition=dropPosition(event);
+    });
+    wrap.addEventListener('dragleave',event=>{if(!wrap.contains(event.relatedTarget)){wrap.classList.remove('drop-target');delete wrap.dataset.dropPosition;}});
+    wrap.addEventListener('drop',event=>{
+      event.preventDefault();event.stopPropagation();const position=dropPosition(event);
+      wrap.classList.remove('drop-target');delete wrap.dataset.dropPosition;
+      try{
+        const ids=JSON.parse(event.dataTransfer.getData('application/x-fitnessos-blocks'));
+        if(!Array.isArray(ids)||!ids.length||!ids.every(id=>state.blocks.some(b=>b.id===id&&b.page===block.page)))return;
+        if(position==='inside')move(ids,block.id);
+        else if(position==='before')move(ids,block.parent||null,block.id);
+        else {
+          const siblings=children(block.page,block.parent||null),next=siblings[siblings.indexOf(block)+1];
+          move(ids,block.parent||null,next?.id||null);
+        }
+      }catch{}
+    });
     const check=document.createElement('input');check.type='checkbox';check.checked=selected.has(block.id);
     check.setAttribute('aria-label',`Select ${block.title||block.kind}`);
     check.onchange=()=>{if(check.checked)selected.add(block.id);else selected.delete(block.id);wrap.classList.toggle('selected',check.checked)};
+    toolbar.append(button('Move to...',()=>{selected.clear();selected.add(block.id);moveDialog();},'text-button'));
     toolbar.append(check,button('↑',()=>{const siblings=children(block.page,block.parent||null),at=siblings.indexOf(block);if(at>0)move([block.id],block.parent||null,siblings[at-1].id)},'text-button'),button('↓',()=>{
       const siblings=children(block.page,block.parent||null),at=siblings.indexOf(block);if(at<siblings.length-1){const next=siblings[at+2];move([block.id],block.parent||null,next?.id||null)}
     },'text-button'),button('Edit',()=>editBlock(block),'text-button'));
+    toolbar.append(button('Duplicate',()=>{
+      const subtree=state.blocks.filter(b=>isBlockDescendant(b.id,block.id)), mapping=new Map(subtree.map(b=>[b.id,id()]));
+      state.blocks.push(...subtree.map(b=>({...b,id:mapping.get(b.id),parent:mapping.get(b.parent)||b.parent})));persist();render();
+    },'text-button'),button('Remove view',()=>{
+      if(!confirm('Remove this block and its nested blocks? Saved fitness records stay intact. Use Undo layout to recover.'))return;
+      const removed=new Set(state.blocks.filter(b=>isBlockDescendant(b.id,block.id)).map(b=>b.id));state.blocks=state.blocks.filter(b=>!removed.has(b.id));selected.clear();persist();render();
+    },'text-button'));
     const body=document.createElement('div');body.className='block-body';
     if(block.kind==='section'){
       const head=document.createElement('div');head.className='section-head';
@@ -177,23 +228,7 @@ window.addEventListener('workspace-ready', ({detail:{state,persist}}) => {
     else if(block.kind==='divider')body.append(document.createElement('hr'));
     else if(block.kind==='tool'||block.kind==='action'){
       const link=document.createElement('a');link.href=`#${block.route||'home'}`;link.className='secondary-button';link.textContent=block.title||routes[block.route]||'Open tool';body.append(link);
-    } else if(block.kind==='sets'){
-      const head=document.createElement('div');head.className='section-head';const h=document.createElement('h2');h.textContent=block.title||'Recent sets';
-      head.append(h,button('Log a set',()=>window.openSetEditor?.(),'secondary-button'));body.append(head);
-      const content=document.createElement('div');content.className='block-records';content.textContent='Loading sets…';body.append(content);
-      const current=++request;
-      readFeature(`/api/sets${block.exercise?`?exercise=${encodeURIComponent(block.exercise)}`:''}`).then(rows=>{
-        if(current>request||!content.isConnected)return;
-        content.replaceChildren();
-        if(!rows.length){content.textContent='No sets recorded yet.';return;}
-        const list=document.createElement('ul');list.className='compact-list';
-        for(const row of [...rows].sort((a,b)=>b.id-a.id).slice(0,8)){
-          const li=document.createElement('li');const title=document.createElement('strong');title.textContent=`${row.exercise} · ${row.reps} reps`;
-          const detail=document.createElement('span');detail.textContent=`${row.activity_date} · ${row.load??'Unknown'} ${row.load==null?'':`${row.unit} ${row.load_type==='per_hand'?'per hand':'total'}`}`;
-          li.append(title,detail);list.append(li);
-        }content.append(list);
-      }).catch(error=>{if(content.isConnected)content.textContent=error.message});
-    }
+    } else if(['sets','meals','body','journal','workouts'].includes(block.kind)){body.append(window.renderRecordView(block));}
     wrap.append(toolbar,body);return wrap;
   }
   function render() {
@@ -210,15 +245,20 @@ window.addEventListener('workspace-ready', ({detail:{state,persist}}) => {
     const picker=document.createElement('select');picker.setAttribute('aria-label','Open page');
     for(const p of state.pages)picker.add(new Option(`${'  '.repeat(Math.min(breadcrumbs(p).length-1,4))}${p.emoji||'📄'} ${p.title}`,p.id));
     picker.value=page.id;picker.onchange=()=>location.hash=`#page/${encodeURIComponent(picker.value)}`;
-    tools.append(picker);
-    tools.append(button('+ Add block',()=>editBlock()),button('Move selected',moveDialog),button('Refresh records',render));
-    const canvas=document.createElement('div');canvas.className='page-canvas';
+    tools.append(picker,button(editingBlocks?'Done customizing':'Customize blocks',()=>{editingBlocks=!editingBlocks;render();}));
+    tools.append(button('+ Add block',()=>editBlock()),button('Move selected',moveDialog),button('Refresh records',()=>{window.clearRecordViewCache();render();}));
+    const columns=document.createElement('select');columns.setAttribute('aria-label','Page columns');columns.append(new Option('One column','1'),new Option('Two columns','2'));columns.value=page.columns||1;columns.onchange=()=>{page.columns=Number(columns.value);persist();render();};tools.append(columns);
+    tools.append(button('Remove page',()=>{
+      if(!confirm('Remove this page, its subpages and their views? Fitness records stay intact. Undo layout can restore the pages.'))return;
+      const removed=new Set(state.pages.filter(p=>isPageDescendant(p.id,page.id)).map(p=>p.id));state.pages=state.pages.filter(p=>!removed.has(p.id));state.blocks=state.blocks.filter(b=>!removed.has(b.page));window.fitnessPages=state.pages;persist();location.hash='#home';nav();window.dispatchEvent(new Event('fitness-pages-changed'));
+    }));
+    const canvas=document.createElement('div');canvas.className='page-canvas';canvas.dataset.columns=page.columns||1;canvas.classList.toggle('editing-layout',editingBlocks);
     for(const block of children(page.id,null))canvas.append(blockElement(block,0));
     if(!canvas.children.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='This page is empty. Add a block to make it yours.';canvas.append(empty)}
     root.append(crumb,heading,tools,canvas);
     let start=null,rect=null;
     canvas.addEventListener('pointerdown',event=>{
-      if(event.pointerType==='touch'||event.button!==0||event.target!==canvas)return;
+      if(!editingBlocks||event.pointerType==='touch'||event.button!==0||event.target!==canvas)return;
       start={x:event.clientX,y:event.clientY};rect=document.createElement('div');rect.className='selection-rectangle';document.body.append(rect);canvas.setPointerCapture(event.pointerId);
     });
     canvas.addEventListener('pointermove',event=>{
@@ -235,5 +275,6 @@ window.addEventListener('workspace-ready', ({detail:{state,persist}}) => {
   }
   window.addEventListener('hashchange',()=>{selected.clear();render()});
   window.addEventListener('records-changed',()=>{if(location.hash.startsWith('#page/'))render()});
+  window.addEventListener('workspace-reset',()=>{selected.clear();window.fitnessPages=state.pages;render();});
   nav();render();
 });

@@ -23,14 +23,16 @@ async function saveFeature(formNode, path, payload, statusSelector, afterSave) {
   button.disabled = true;
   featureStatus(statusSelector, "Saving…");
   try {
+    await window.FitnessDrafts?.capture(formNode);
     await postBackup(path, payload);
+    await window.FitnessDrafts?.saved(formNode);
     window.dispatchEvent(new Event("records-changed"));
   } catch (error) {
     featureStatus(statusSelector, `${error.message} Your entries are still here.`, "error");
     button.disabled = false;
     return;
   }
-  featureStatus(statusSelector, "Saved in this computer's database.", "success");
+  featureStatus(statusSelector, window.FITNESSOS_HOSTED ? "Saved to your account." : "Saved in this computer's database.", "success");
   try {
     await afterSave();
   } catch {
@@ -189,15 +191,22 @@ calorieForm.addEventListener("submit", async (event) => {
 
 let calendarDate = new Date(now.getFullYear(), now.getMonth(), 1);
 let selectedDay = localToday;
+try {const stored=sessionStorage.getItem('fitnessos-history-day');if(/^\d{4}-\d{2}-\d{2}$/.test(stored)){selectedDay=stored;calendarDate=new Date(Number(stored.slice(0,4)),Number(stored.slice(5,7))-1,1);}}catch{}
+let dayRequest=0,calendarRequest=0;
 
 async function loadDay() {
+  const request=++dayRequest,day=selectedDay;
+  try{sessionStorage.setItem("fitnessos-history-day",day);}catch{}
   const title = document.querySelector("#day-title");
   const details = document.querySelector("#day-details");
   title.textContent = selectedDay;
   details.textContent = "Loading day…";
   try {
-    const data = await readFeature(`/api/day?date=${selectedDay}`);
+    const data = await readFeature(`/api/day?date=${day}`);
+    if(request!==dayRequest)return;
     details.replaceChildren();
+    const actions=document.createElement('div');actions.className='quick-links';
+    for(const [label,action] of [['Log a set on this day',()=>{form.elements.activity_date.value=day;window.openSetEditor();}],['Add food on this day',()=>window.openFoodEditor(day)]]){const b=document.createElement('button');b.type='button';b.className='secondary-button';b.textContent=label;b.onclick=action;actions.append(b);}details.append(actions);
     for (const [heading, rows, describe] of [
       ["Strength sets", data.sets, (row) => `${row.exercise} · ${describeSet(row)}`],
       ["Body entries", data.body, (row) => [row.weight === null ? null : `${row.weight} ${row.weight_unit}`, row.body_fat_pct === null ? null : `${row.body_fat_pct}% body fat`, ...["waist", "chest", "hips", "arm", "thigh"].filter((key) => row[key] !== null).map((key) => `${key} ${row[key]} ${row.measure_unit}`)].filter(Boolean).join(" · ")],
@@ -210,7 +219,13 @@ async function loadDay() {
       if (rows.length) {
         const list = document.createElement("ul");
         list.className = "compact-list";
-        for (const row of rows) setTextRow(list, describe(row), "");
+        for (const row of rows){
+          const item=setTextRow(list,describe(row),'');
+          if(heading==='Strength sets'){
+            const repeat=document.createElement('button');repeat.type='button';repeat.className='text-button';repeat.textContent='Repeat on this day';
+            repeat.onclick=()=>{form.elements.exercise.value=row.exercise;form.elements.activity_date.value=day;form.elements.reps.value=row.reps;form.elements.load.value=row.load??'';form.elements.unit.value=row.unit;form.elements.load_type.value=row.load_type;window.openSetEditor();};item.append(repeat);
+          }
+        }
         section.append(list);
       } else {
         const p = document.createElement("p");
@@ -226,6 +241,7 @@ async function loadDay() {
 }
 
 async function loadCalendar() {
+  const request=++calendarRequest;
   const year = calendarDate.getFullYear();
   const monthIndex = calendarDate.getMonth();
   const month = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
@@ -236,6 +252,7 @@ async function loadCalendar() {
   status.textContent = "Loading calendar…";
   try {
     const counts = await readFeature(`/api/calendar?month=${month}`);
+    if(request!==calendarRequest)return;
     const firstWeekday = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
     const length = new Date(year, monthIndex + 1, 0).getDate();
     if (!selectedDay.startsWith(month)) selectedDay = `${month}-01`;

@@ -62,11 +62,14 @@ def ensure_schema(connection):
     if 'nutrition' not in columns:
         connection.execute("ALTER TABLE calorie_entries ADD COLUMN nutrition TEXT")
     connection.execute("CREATE TABLE IF NOT EXISTS workspace (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL)")
+    connection.execute("CREATE TABLE IF NOT EXISTS workspace_meta (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL)")
     if 'meal_time' not in columns:
         connection.execute('ALTER TABLE calorie_entries ADD COLUMN meal_time TEXT')
 
 
 def db(database):
+    if hasattr(database, 'connect'):
+        return database.connect()
     connection = sqlite3.connect(database)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
@@ -346,6 +349,7 @@ def existing_extra(connection):
 
 
 def restore_extra(connection, extra, created_at):
+    connection.execute("INSERT INTO workspace_meta VALUES (1, 1) ON CONFLICT(id) DO UPDATE SET revision=revision+1")
     connection.execute("INSERT OR REPLACE INTO workspace VALUES (1, ?)", (json.dumps(extra.get("workspace", {})),))
     height, age, variant = extra["profile"]
     if any(value is not None for value in (height, age, variant)):
@@ -397,6 +401,37 @@ def validate_workspace(value):
         raise ValueError('Choose a supported theme.')
     if value.get('font', 'serif') not in ('serif', 'sans', 'mono'):
         raise ValueError('Choose a supported font.')
+    if type(value.get('schema_version', 1)) is not int or value.get('schema_version', 1) not in (1, 2):
+        raise ValueError('Unsupported workspace version.')
+    if value.get('density', 'comfortable') not in ('comfortable', 'compact'):
+        raise ValueError('Invalid display density.')
+    navigation = value.get('navigation', [])
+    if not isinstance(navigation, list) or len(navigation) > 30 or any(not isinstance(item, str) or item not in ('home','log','history','body','calories','make','daily','workouts','foods','photos','exercises','progress','backup','settings','reminders') for item in navigation) or len(set(navigation)) != len(navigation):
+        raise ValueError('Invalid navigation order.')
+    layouts = value.get('screen_layouts', {})
+    if not isinstance(layouts, dict) or len(layouts) > 20:
+        raise ValueError('Invalid screen layouts.')
+    for route, layout in layouts.items():
+        if route not in ('home','history','body','calories','daily','workouts','foods','progress','make') or not isinstance(layout, dict):
+            raise ValueError('Invalid screen layout.')
+        if type(layout.get('columns', 1)) is not int or layout.get('columns', 1) not in (1, 2):
+            raise ValueError('Choose one or two columns.')
+        panels = layout.get('panels', [])
+        if not isinstance(panels, list) or len(panels) > 40:
+            raise ValueError('Too many panels.')
+        identities = set()
+        for panel in panels:
+            if not isinstance(panel, dict) or not isinstance(panel.get('id'), str) or len(panel['id']) > 100 or panel['id'] in identities:
+                raise ValueError('Invalid panel identity.')
+            identities.add(panel['id'])
+            if type(panel.get('span', 1)) is not int or panel.get('span', 1) not in (1, 2):
+                raise ValueError('Panel width must be one or two columns.')
+            if panel.get('kind') is not None and panel['kind'] not in ('sets','meals','body','journal','workouts'):
+                raise ValueError('Invalid record panel.')
+            if not isinstance(panel.get('exercise', ''), str) or len(panel.get('exercise', '')) > 80:
+                raise ValueError('Invalid exercise filter.')
+            if any(type(panel.get(key, False)) is not bool for key in ('hidden', 'collapsed')):
+                raise ValueError('Invalid panel visibility.')
     steps = value.get('steps', {})
     if not isinstance(steps, dict) or len(steps) > 500:
         raise ValueError('Invalid exercise step preferences.')
@@ -446,6 +481,8 @@ def validate_workspace(value):
         if identity in page_parents:
             raise ValueError('Duplicate page id.')
         name(page.get('title'), 'a page title', 80)
+        if type(page.get('columns', 1)) is not int or page.get('columns', 1) not in (1, 2):
+            raise ValueError('Choose one or two page columns.')
         if not isinstance(page.get('emoji', ''), str) or len(page.get('emoji', '')) > 16:
             raise ValueError('Invalid page icon.')
         if page.get('parent') is not None and not isinstance(page.get('parent'), str):
@@ -470,7 +507,7 @@ def validate_workspace(value):
         if identity in block_parents or not isinstance(block.get('page'), str) or block['page'] not in page_parents:
             raise ValueError('Duplicate block id or missing page.')
         kind = block.get('kind')
-        if not isinstance(kind, str) or kind not in ('section', 'text', 'heading', 'divider', 'tool', 'sets', 'action'):
+        if not isinstance(kind, str) or kind not in ('section', 'text', 'heading', 'divider', 'tool', 'sets', 'action', 'meals', 'body', 'journal', 'workouts'):
             raise ValueError('Unsupported block type.')
         for key in ('title', 'text'):
             if not isinstance(block.get(key, ''), str) or len(block.get(key, '')) > 4000:
@@ -509,5 +546,35 @@ def get_workspace(database):
 def save_workspace(value, database):
     value = validate_workspace(value)
     with closing(db(database)) as connection, connection:
+        connection.execute('BEGIN IMMEDIATE')
+        current = connection.execute('SELECT data FROM workspace WHERE id=1').fetchone()
+        if current and json.loads(current['data']).get('schema_version', 1) >= 2:
+            raise WorkspaceConflict('Reload this older tab before editing the workspace.')
         connection.execute('INSERT OR REPLACE INTO workspace VALUES (1, ?)', (json.dumps(value),))
+        connection.execute('INSERT INTO workspace_meta VALUES (1, 1) ON CONFLICT(id) DO UPDATE SET revision=revision+1')
     return value
+
+
+class WorkspaceConflict(ValueError):
+    pass
+
+
+def workspace_state(database):
+    with closing(db(database)) as connection:
+        row = connection.execute('SELECT data, COALESCE((SELECT revision FROM workspace_meta WHERE id=1), 0) AS revision FROM workspace WHERE id=1').fetchone()
+        return {'workspace': json.loads(row['data']) if row else {}, 'revision': row['revision'] if row else 0}
+
+
+def save_workspace_state(request, database):
+    if not isinstance(request, dict) or type(request.get('revision')) is not int or request['revision'] < 0:
+        raise ValueError('Send the workspace revision.')
+    value = validate_workspace(request.get('workspace'))
+    with closing(db(database)) as connection, connection:
+        connection.execute('BEGIN IMMEDIATE')
+        row = connection.execute('SELECT revision FROM workspace_meta WHERE id=1').fetchone()
+        revision = row['revision'] if row else 0
+        if revision != request['revision']:
+            raise WorkspaceConflict('This workspace changed in another tab. Review the newer version before saving.')
+        connection.execute('INSERT OR REPLACE INTO workspace VALUES (1, ?)', (json.dumps(value),))
+        connection.execute('INSERT OR REPLACE INTO workspace_meta VALUES (1, ?)', (revision + 1,))
+    return {'workspace': value, 'revision': revision + 1}

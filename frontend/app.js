@@ -65,6 +65,7 @@ function setTextRow(list, title, detail) {
 function fillValues(set) {
   form.elements.reps.value = set.reps;
   form.elements.load.value = set.load ?? "";
+  form.dispatchEvent(new Event('input', {bubbles:true}));
 }
 
 function fillFromSavedSet(set) {
@@ -180,8 +181,10 @@ async function loadAccount() {
       return;
     }
     document.querySelector("#account-name").textContent = status.name;
+    await window.FitnessDrafts?.activate(status.draft_scope);
   } catch {
     document.querySelector("#account-name").textContent = "you";
+    await window.FitnessDrafts?.activate(null);
   }
 }
 
@@ -303,7 +306,8 @@ function renderExercises() {
     button.addEventListener("click", () => selectExerciseForLog(name));
     shortcuts.append(button);
   }
-  for (const item of exercises) {
+  const search=(document.querySelector('#exercise-search')?.value||'').trim().toLowerCase();
+  for (const item of exercises.filter(item=>item.exercise.toLowerCase().includes(search))) {
     allList.append(exerciseCard(item.exercise, `${item.set_count} ${item.set_count === 1 ? "set" : "sets"}${item.last_date ? ` · last dated ${item.last_date}` : " · created exercise"}`, favoriteKey.has(item.exercise.toLowerCase())));
   }
   document.querySelector("#favorites-status").textContent = favorites.length ? "" : "No favorites yet. Add one from your logged exercises.";
@@ -438,12 +442,19 @@ form.addEventListener("submit", async (event) => {
     unit: fields.get("unit"), load_type: fields.get("load_type"),
     session_id: window.workoutContext?.id ?? null, session_exercise: window.workoutContext?.position ?? null,
   };
+  const lockedFields = [...form.querySelectorAll('input,select,textarea,button[type="button"]')]
+    .map(field => [field, field.disabled]);
+  for (const [field] of lockedFields) field.disabled = true;
   try {
+    let requestId;
+    try { if (window.FitnessDrafts) requestId = await window.FitnessDrafts.prepare(form, set); }
+    catch (error) { showSaveStatus(error.message, 'error'); return; }
     let response;
     try {
       response = await apiFetch("/api/sets", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...(requestId ? { 'Idempotency-Key': requestId } : {}) },
         body: JSON.stringify(set),
+        signal: window.AbortSignal?.timeout(15000),
       });
     } catch {
       showSaveStatus("Could not confirm the save. Check history before retrying; your entries are still here.", "error");
@@ -457,15 +468,17 @@ form.addEventListener("submit", async (event) => {
       return;
     }
     if (!response.ok) {
+      if (response.status === 400) await window.FitnessDrafts?.rejected(form);
       showSaveStatus(`${result.error || "Save failed."} Your entries are still here.`, "error");
       return;
     }
     lastSavedSet = result;
+    await window.FitnessDrafts?.saved(form);
     window.dispatchEvent(new Event("records-changed"));
 
     lastSavedDetails.textContent = `${result.activity_date} · ${result.exercise} · ${describeSet(result)}`;
     lastSavedCard.hidden = false;
-    showSaveStatus("Saved in this computer's database.", "success");
+    showSaveStatus(window.FITNESSOS_HOSTED ? "Saved to your account." : "Saved in this computer's database.", "success");
     form.elements.reps.value = keepValues ? result.reps : "";
     form.elements.load.value = keepValues ? result.load ?? "" : "";
     window.dispatchEvent(new CustomEvent("set-saved", { detail: { ...result, keepValues } }));
@@ -473,6 +486,8 @@ form.addEventListener("submit", async (event) => {
     await Promise.all([loadHistory(), loadRecentExercises(), loadOverview(), loadProgress()]);
     if (form.getClientRects().length) form.elements.reps.focus();
   } finally {
+    window.FitnessDrafts?.failed(form);
+    for (const [field, disabled] of lockedFields) field.disabled = disabled;
     for (const button of form.querySelectorAll('button[type="submit"]')) button.disabled = false;
   }
 });
@@ -546,8 +561,10 @@ restoreButton.addEventListener("click", async () => {
 
 for (const button of document.querySelectorAll("[data-logout]")) {
   button.addEventListener("click", async () => {
+    if (window.FitnessDrafts?.hasDrafts() && !confirm('Sign out and discard unsaved device drafts? Cancel to save or review them first.')) return;
     button.disabled = true;
     try {
+      await window.FitnessDrafts?.clearAll();
       const response = await fetch("/api/auth/logout", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
       });

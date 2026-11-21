@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-11-21 - First local phone/PWA increment
+
+- Targeted Chrome on Avik's OnePlus 11R after approval of the PWA direction. Added `phone.ps1` with fictional demo records, optional private-LAN binding and exact Host/Origin validation; remote account setup is refused. Default localhost behavior remains.
+- Fixed five phone tabs occupying four columns; Log opens Quick add, More includes sign-out, and phone styling adds larger inputs/controls, viewport-aware dialogs, safe-area spacing, bounded content and single-column presentation. Added per-block Move to... and prevented touch/pen rectangle selection on the legacy tree. Physical-device acceptance remains pending.
+- Added manifest/icons, installation guidance and a service worker caching only a public reconnect notice and icons. No private pages/API/photo caching, automatic sync or closed-app reminder capability is implied.
+- Added account-scoped IndexedDB drafts for core record forms and atomic SQLite request IDs for set retries, including concurrent/lost-response cases. Sign-out offers draft discard confirmation; set fields lock during submission. Other record types still require checking History before retrying an uncertain save.
+- Verified 37 Python storage/handler checks, four JS behavior suites and syntax checks. Six existing HTTP tests remain blocked by WinError 10013; browser localhost timed out. No real-phone/install/hosted verification claimed. Selected free-tier Supabase; sign-in/provisioning and the full hosting migration remain outstanding. Vercel preview unchanged.
+
+## 2026-11-21 - Phone experience execution plan
+
+- Prioritized phone usability before further feature expansion at Avik's request. Added `markdowns/PHONE_EXPERIENCE_PLAN.md` with repository findings, mobile navigation/input/customization stages, local phone-access constraints, proposed hosted Python/auth/database work, installation, recoverable drafts, duplicate-save protection and measurable device checks. Distinguishes static Vercel preview from the functioning local app and accepted priority from proposed technical choices. Documentation only; no application changes, deployment or real-phone verification.
+
+## 2026-11-21 - Hand-coded UX learning direction
+
+- Recorded Avik's preference to implement chosen UX improvements himself and use AI to explain the current data flow and review his diffs. Added a current-app exercise and map of the distinct panel, page-block, legacy-section and navigation movement systems to `markdowns/LEARNING_PLAN.md`. Kept the sample Move to top task explicitly unimplemented; corrected the checklist's stale two-column-page item. Documentation only; no new interaction or browser verification is claimed.
+
+## 2026-11-20 - Course-timeframe frontend direction
+
+- Avik prefers polishing the existing JavaScript frontend for his course project over a whole-site React migration now. Focus subsequent work on the current app's usable workflows, responsive customization, reliable saves and hands-on browser/phone review. React is still a possible later experiment for an isolated screen. This is a direction decision; no application code was changed in this entry.
+
+## 2026-11-20 - Drag-to-arrange Overview and panels
+
+- Added Overview to the saved composable layouts: its two statistics, recent activity, Quick start, workspace section links and custom-page links can be reordered, collapsed, hidden/restored, displayed in one or two columns and set to half/full width in a two-column layout. Linked record panels can be added to Overview. Existing live nodes and handlers remain in place; the layout uses the same revision-checked SQLite save, undo and export as other tool pages.
+- Panel grips now preview a before/after insertion line while dragging across a panel, with pointer dragging on touch/pen and move buttons for keyboard access. Custom page blocks preview before/inside/after positions, and can be dropped after another block or inside the middle of a section. Automated syntax and storage checks were run; real-browser and real-phone interaction review is still pending.
+
+## 2026-11-20 - Fictional month-long test database
+
+- Added a reproducible, isolated demo generator and `demo.ps1` launcher that sets `$testDb` to the ignored SQLite sample. Created 30 days of fictional workouts, meals, measurements and journal entries to review populated screens without using personal records. The generator refuses to replace an existing database. SQLite integrity, demo sign-in, session links and backup validation were checked; no browser walkthrough was claimed.
+
+## 2026-11-20 - Steps 2–4 integration follow-up
+
+- Added drag targets for nested custom-page blocks, with Shift to nest inside a section and existing cycle checks for invalid moves. Reduced unnecessary workspace revisions when Quick add opens an already visible panel; duplicating an input form no longer creates an empty layout save. Shared Journal views now exclude undone water entries; additional set views allow a saved exercise filter. Automated storage and JavaScript checks cover the updated behaviors; real-browser acceptance is still pending.
+
+## 2026-11-20 - Feedback execution steps 2–4
+
+- Added transactional revision checks, schema v2, serialized layout saves, conflict feedback, same-tab recovery/download, deliberate reapply and session undo. Older clients cannot bypass revision checks after migration. Sidebar order/density now export with the workspace; restores invalidate stale revisions.
+- Made existing tool panels reorderable, collapsible and removable/restorable, with desktop drag, touch/keyboard movement and one/two columns. Added once-only starter pages, shared paginated record views, page/block removal and block duplication without deleting fitness data. Customization controls stay out of the normal reading layout.
+- Moved set metadata/shortcuts into disclosure controls while keeping units visible; added a food dialog with Search/My foods/Manual modes, expandable nutrient details, journal section shortcuts, remembered history dates and dated repeat/add actions, and exercise-catalogue filtering.
+- Preserved original live form nodes/handlers and entry routes. Updated the manual and checklist. Validation: 29 Python storage/request-handler tests, all JS syntax checks and three JS behavior suites pass. Six network HTTP tests are blocked by Windows socket permissions (WinError 10013); no browser/phone visual or timing claims are made.
+
+## 2026-11-19 - Hosted identity and ownership plan
+
+- Added `markdowns/HOSTING_AND_IDENTITY_PLAN.md` after Avik raised Google sign-in. Records the current single-account schema gap, proposed managed authentication, per-user access controls, session lifecycle, private-photo step-up, local-data migration and two-account isolation tests. No auth provider was provisioned or application code changed.
+
 ## 2026-11-19 - Feedback implementation, first increment
 
 - Implemented a screenshot-informed dark shell with a lighter floating sidebar, compact top location trail, subdued cards/forms/Quick add, and quieter login copy. Added sidebar up/down order controls and Settings for theme, type and density. The navigation order and density use browser storage; theme and type retain the existing workspace save. Added local app-open reminders for time/day/message, quiet hours, pause/remove and supported preset/custom vibration, plus a compact Journal with one expanded editor at a time.
@@ -108,3 +152,7 @@ This file records semi-important and larger product changes, architecture choice
 - The current testing routine is in `markdowns/TESTING_ROUTINE.md`.
 - Browser smoke checks covered body logging and estimates, routine creation, calorie logging, and calendar day details in a phone-sized viewport. A real-device test has not been completed.
 - The app’s Python tests and JavaScript syntax checks passed during the feature work on 2026-11-05. This entry records that check at that time, not a claim about later code changes.
+# 22 November 2026 — hosted phone preparation (not deployed)
+
+Created a Mumbai free-tier Supabase project and applied owner-scoped PostgreSQL schema with forced RLS across 13 private tables. Prepared Python hosted transport and PostgreSQL adapter, private email-link sign-in limited to the approved email, and hosted UI copy; hosted photo routes and photo backups are denied until a secure unlock/storage flow exists. The active Vercel deployment remains the static preview because automated review rejected sending the new database login to Vercel. Ten hosted boundary tests and privileged rollback-only SQL checks pass; restricted-role, actual hosting and real phone acceptance are pending. The local SQLite app and its uncommitted work remain in place. See `markdowns/HOSTED_HANDOFF.md` for exact gates.
+

@@ -22,7 +22,8 @@
     const buttons = [...formNode.querySelectorAll('button')];
     buttons.forEach(button => button.disabled = true); status.textContent = 'Saving…';
     try {
-      await work(); window.dispatchEvent(new Event('records-changed')); status.textContent = "Saved in this computer's database.";
+      await window.FitnessDrafts?.capture(formNode);
+      await work(); await window.FitnessDrafts?.saved(formNode); window.dispatchEvent(new Event('records-changed')); status.textContent = window.FITNESSOS_HOSTED ? "Saved to your account." : "Saved in this computer's database.";
       try { await after?.(); await refresh(); }
       catch { status.textContent = 'Saved, but the display could not refresh. Reload to review.'; }
     } catch (error) {
@@ -53,7 +54,7 @@
       const li = setTextRow($('#water-list'), `${row.data.ml} ml`, row.data.time || 'Time unknown');
       li.append(action('Undo this entry', async event => {
         event.target.disabled = true;
-        try { await postBackup('/api/water/undo', { id: row.id }); await refresh(); }
+        try { await postBackup('/api/water/undo', { id: row.id }); window.dispatchEvent(new Event('records-changed')); await refresh(); }
         catch (error) { $('#water-form .status').textContent = error.message; event.target.disabled = false; }
       }));
     }
@@ -137,7 +138,7 @@
     if (session.data.status === 'active') detail.append(action('Finish this session', async event => {
       event.target.disabled = true;
       try {
-        await postBackup('/api/workouts/finish', { id: session.id });
+        await postBackup('/api/workouts/finish', { id: session.id }); window.dispatchEvent(new Event('records-changed'));
         if (window.workoutContext?.id === session.id) window.clearWorkoutContext();
         await refresh(); $('#session-status').textContent = 'Session finished. Its saved sets remain in History.';
       } catch (error) { $('#session-status').textContent = error.message; event.target.disabled = false; }
@@ -174,6 +175,13 @@
     await postBackup('/api/photos/lock', {});
   }
   async function loadPhotos() {
+    if (window.FITNESSOS_HOSTED) {
+      $('#photo-unlock-card').hidden = true;
+      $('#photo-private').hidden = true;
+      $('[data-view="photos"] .page-heading p').textContent = 'Photos remain available in the local app. Hosted photo protection is not ready yet.';
+      $('#photo-status').textContent = 'Photo upload, viewing and photo backups are disabled here.';
+      return;
+    }
     const status = await readFeature('/api/photos/status');
     if (location.hash !== '#photos') return;
     if (!status.until) { hidePhotos(); return; }
@@ -344,6 +352,7 @@
     }
     window.addEventListener('hashchange',()=>route().catch(showError));
     window.addEventListener('records-changed',()=>{refresh().catch(showError); if(location.hash==='#progress') compareStrength();});
+    if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
     window.dispatchEvent(new Event('journal-ready'));
     await route();
   }

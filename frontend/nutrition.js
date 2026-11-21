@@ -34,7 +34,7 @@
   }
   window.addEventListener('journal-ready',addFoodFields);
   addFoodFields();
-  const fields=document.createElement('details');fields.open=true;fields.innerHTML='<summary>Nutrition for this entry</summary><div class="measure-grid"></div><p class="muted">Leave unavailable values blank.</p>';
+  const fields=document.createElement('details');fields.open=false;fields.innerHTML='<summary>Nutrition for this entry</summary><div class="measure-grid"></div><p class="muted">Leave unavailable values blank.</p>';
   for(const [key,title] of Object.entries(names)){
     const label=document.createElement('label');label.textContent=title;
     const input=document.createElement('input');input.type='number';input.min='0';input.max='100000';input.step='any';input.name=key;label.append(input);fields.querySelector('div').append(label);
@@ -96,10 +96,11 @@
     if (summary.querySelector('input').value !== day) return;
     const container=document.querySelector('#nutrient-totals');container.replaceChildren();
     const heading=document.createElement('h2');heading.textContent=`${rows.reduce((total,row)=>total+row.kcal,0)} kcal logged`;container.append(heading);
+    const secondary=document.createElement('details');secondary.innerHTML='<summary>More nutrients and coverage</summary>';container.append(secondary);
     for(const [key,title] of Object.entries(names)){
       let total=0,known=0;
       for(const row of rows){const data=typeof row.nutrition==='string'?JSON.parse(row.nutrition):row.nutrition;if(data?.[key]!=null){total+=data[key];known++;}}
-      const line=document.createElement('p');line.textContent=`${title}: ${known?Number(total.toFixed(2)):'Unknown'}${known<rows.length?' · partial coverage':''} (${known}/${rows.length} entries)`;container.append(line);
+      const line=document.createElement('p');line.textContent=`${title}: ${known?Number(total.toFixed(2)):'Unknown'}${known<rows.length?' · partial coverage':''} (${known}/${rows.length} entries)`;(['protein','carbs','fat'].includes(key)?container:secondary).append(line);
     }
   }
   summary.querySelector('input').addEventListener('change',()=>totals().catch(error=>{document.querySelector('#nutrient-totals').textContent=error.message;}));

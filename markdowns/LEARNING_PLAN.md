@@ -6,6 +6,23 @@ Build a **web app first**, with a good phone experience. The earlier preference 
 
 Use a **learn → do → explain** loop: spend roughly 30–45 minutes on one lesson, make a small change yourself, and explain how the result works. You can ask AI to help, but read the changed files and reproduce the behavior before moving on. You do not need to finish a whole course before building anything.
 
+## 21 November: hand-code improvements in the working app
+
+Avik now prefers to write the UX improvements he selects himself. The following is a current exercise in the existing app; the older toy exercises below remain useful for learning basics but do not describe the whole current implementation. React migration is deferred for the course window, with a small later experiment still possible if a concrete task warrants it. Previous full-migration time estimates were rough discussion, not a schedule or requirement.
+
+Start with **Overview → Customize page** in the fictional database (`. .\demo.ps1`; see [demo instructions](DEMO_DATABASE.md)). Pick one observed friction and write a short expected-behavior statement before editing. A small first exercise is adding a **Move to top** action to each panel; this was a suggested practice task, **not implemented or committed**. A good result moves Quick start, persists after reload, can be undone, and preserves its button/form behavior. After that, choose the next change from actual browser feedback rather than treating examples here as a feature checklist.
+
+Trace the code before changing it:
+
+| Moving system | Source and current behavior |
+| --- | --- |
+| Overview/tool panels | `frontend/screen_layouts.js`: editing mode exposes a grip; desktop native drag and touch/pen pointer handling target the upper/lower half of another panel. `place()` reorders panel IDs in `state.screen_layouts[route].panels`; `render()` moves existing live DOM nodes in a one/two-column grid. Width, visibility and collapse use the same layout state. |
+| Custom-page blocks | `frontend/workspace_pages.js`: native toolbar drag previews before/after a block or inside a section (middle or Shift). `move()` checks ancestry, changes block order and parent, then saves and rerenders. **Move selected** can change pages; dragging itself stays on the page. Real-phone drag still needs checking. |
+| Older workspace links and main tools | `frontend/workspace.js`: legacy section-link drag uses drop-before or Shift to nest. `frontend/shell.js`: main sidebar tool order uses **Arrange navigation** and up/down buttons, not drag. |
+| Saving | `frontend/workspace.js` calls `persist()`; `frontend/workspace_store.js` queues revision-checked saves to `/api/workspace/state`, keeps failed same-tab drafts and provides Undo layout. Visible movement precedes server confirmation; wait for **Workspace saved** before assuming persistence. |
+
+For each hand-coded change: inspect `git status` and review the existing uncommitted/untracked work before making a checkpoint; change one behavior and its CSS if needed; run `node --check frontend/screen_layouts.js` and `node frontend/test_workspace_store.cjs` when working on panel movement; then try move, reload, Undo and failure/retry in a disposable database. Use [the manual walkthrough](MANUAL_TEST_GUIDE.md) for phone and backup checks. Ask AI to review your diff and explain edge cases; keep implementation ownership with Avik unless he requests a direct fix.
+
 ## 0. Get comfortable saving and sharing progress with Git
 
 Follow [the Git and GitHub crash course](GIT_GITHUB_CRASH_COURSE.md). Make the first commit, push it from Ubuntu WSL, and then make and push one more small edit without following every instruction word for word. Know the difference between a file edit, a staged change, a local commit, and a push.

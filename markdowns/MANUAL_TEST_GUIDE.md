@@ -6,6 +6,8 @@ This is a walkthrough of what the current working tree **implements**, not a cla
 
 ## 1. Start a clean test run
 
+For a populated month of fictional records instead of a fresh empty database, follow [the demo database guide](DEMO_DATABASE.md). Its launcher sets `$testDb` and runs the local server without touching the normal database.
+
 Open PowerShell and run:
 
 ```powershell
@@ -110,8 +112,8 @@ The following are **still work items**, so a missing control here is expected; s
 
 | Not yet completed or established | Current boundary |
 | --- | --- |
-| Full Notion-like editing | Basic pages/blocks exist; no rich editor, linked database system, canvas drag-and-drop, undo or full layout customization |
-| Reliable two-tab workspace editing | No revision-aware workspace save/conflict handling yet; avoid editing the same workspace in two tabs while evaluating data safety |
+| Full Notion-like editing | Pages, nested blocks, bounded linked record views, drag placement, session undo and saved panel layouts exist; rich text, freeform canvas resizing, persistent trash and full linked databases remain open |
+| Reliable two-tab workspace editing | Revision-checked saves and explicit conflict recovery are implemented; the two-tab workflow still needs browser verification before relying on it |
 | Broader voice commands | Only a reviewable strength-set draft exists; microphone and phone support need hands-on checks |
 | Complete offline phone workflow | No durable offline phone saves or sync guarantee; local Python server must be reachable for writes |
 | Fully hosted working app | Vercel serves a static preview; hosted Python endpoint, database and private account/record storage remain to build |
@@ -127,10 +129,71 @@ The following are **still work items**, so a missing control here is expected; s
 - [ ] On **Reminders**, save a message for the next minute, choosing weekdays or daily and an optional quiet period. Keep the app open: verify the in-app message arrives once. Try pause/resume, remove and Test vibration with Off, Short, Double and a custom pulse sequence. Browser support varies. Reminders and sidebar order currently live in this browser's local storage, so the JSON backup does not include them, and reminders do not run after the app closes.
 - [ ] Search the expanded Exercises catalogue in Log, Make, and Exercises; the same 75 suggestions should appear without showing fabricated workout history.
 
-The frontend plan's whole-site content blocks, conflict-safe edits, body mesh and closed-app reminders have not been implemented in this increment. Track these as open in `missing.md`.
+This first feedback increment predates the later page blocks, panel layouts and conflict-safe saves described in the 20 November appendices. Body mesh and closed-app reminders remain open in `missing.md`.
 
 ## 12. Feedback notes
 
 For each problem, write: **screen/page → action → expected → actual → date/browser/device → whether it survives reload → screenshot if useful**. For an entry problem, add the test exercise/food and exact units. Keep three labels distinct in `missing.md`: *implemented*, *I verified this on my device*, and *I accept this interaction*. A new source file or a green automated test establishes only the first of these.
 
 If you want a short first pass, do Sections **1, 3, 5 and 9** first. They expose the main new page workflow, one complete log/history loop and whether your records can actually be recovered.
+
+## 20 November: feedback steps 2–4 walkthrough
+
+Use the disposable server/database from section 1. These checks are pending human execution. Keep a backup of any existing layout before testing migration.
+
+### Layout save and recovery
+
+1. Open the same account in two tabs. In tab A, use **Settings → Arrange navigation**, move a tool, change density, and wait for **Workspace saved** near the top bar. Reload A: order and density should survive. Export a backup: `workspace` should contain navigation, density and schema version 2.
+2. Make a layout edit in stale tab B. Expect a conflict message, with B's draft still visible and A's saved layout intact. Open **Save recovery** to download B's draft or reload the saved layout. **Reapply draft to latest** names the changed layout areas and asks before replacing those areas in the latest revision. It is an explicit replacement of those areas, not a field-by-field automatic merge.
+3. In browser developer tools, block `/api/workspace/state` POST requests (or stop the server after loading). Move a panel. Expect a failure and retained draft, never a false saved message. Resume the server and choose **Retry save**. Reload during failure: **Recover unsaved draft** should recover this tab's snapshot. Download is the fallback if session storage is unavailable. This is layout recovery, not offline fitness-record entry.
+4. Make two changes, then use **Undo layout** twice. Check layout and persisted result after each undo. Undo history lasts only for the current loaded session (up to 30 changes); it is not permanent trash.
+5. Restore an export into a new empty test database. Verify pages, blocks, panel order/visibility, columns, theme, font, density and sidebar order. Reminders still do not export. Old open tabs must not overwrite the restored revision.
+6. Open an older workspace backup, then reload three times. Existing pages/notes must remain intact; the starter pages and views must not multiply. Removing a starter page must not recreate it on reload.
+
+### Composition across the site
+
+Visit **Workout sessions, History, Nutrition, Journal, Body, Foods, Make and Progress**. Each has **Customize page**.
+
+- Use **Move up/down** and desktop drag from the panel control strip. On custom pages, drag a block toolbar onto another block to place it before that block; hold Shift while dropping onto a section to nest it. Invalid cycles should leave the layout unchanged. Try the same controls using Tab/Enter. Choose one or two columns; narrow screens must stack in the saved reading order.
+- Collapse/expand a panel; remove a view, then restore it through **Restore hidden panel**. No fitness record may disappear from History. **Reset layout** asks for confirmation, restores the original panels, and can be undone.
+- **Add record view** adds sets, meals, body records, journal entries or workouts. Duplicate a record view. For a set view, enter an Exercise filter and confirm only matching sets appear after save and reload. Both views should update after a successful save; neither stores a separate copy of the record. Form panels keep one shared draft; use Add record view rather than duplicating their input fields.
+- With more than eight sample records, use **Next records**. Expect the next distinct group, not repeated records. Save a new record and verify visible copies refresh. Unknown body/food values must remain unknown.
+- Type a draft in a form, move its panel, collapse/restore it and use undo. Check that the unsaved form values stay intact.
+- Try Quick add for a panel that was hidden/collapsed. The required editor should become reachable. Existing tool URLs and routine/session entry points should still work.
+
+In **Pages**, find the Training, History, Nutrition, Journal and Body starter pages. Existing user pages with these IDs/titles are preserved. They contain linked records and tool entry links. Use **Customize blocks** to expose selection, movement, Edit, Duplicate and Remove view. Duplicate a nested section: its descendants should be copied once with independent IDs. Remove a parent section or a page with subpages; use Undo layout to restore it. Saved fitness records must remain unchanged. Try one/two columns and the phone page picker.
+
+### Set entry and history
+
+- Open **Log a set**. Exercise, previous value, reps/load and four adjustment buttons remain primary. The date/unit/convention summary opens **options**, including the increment. **Recent exercises and favourites** and voice are expandable.
+- Change unit/convention; ensure the visible summary and last-value lookup agree. Check unknown load versus zero, adjusted load, failed save, rapid double-submit, Save-and-repeat and voice-draft review.
+- In **Exercises**, type part of an exercise name in Search. Favourites and logging must still use the shared 75-exercise catalogue plus user names.
+- In **History**, select an old day, open another tool, return and reload. The selected date/month should remain. **Repeat on this day** opens the selected set values with that day; **Log a set on this day** and **Add food on this day** must not silently switch to today. Repeat creates a new record; it does not edit the original.
+- Rapidly change calendar months/days. Slow responses should not replace a newer selected day. On desktop, calendar/day panels can sit alongside each other; use one column on narrow screens.
+
+### Food and journal
+
+- In **Nutrition**, choose **Add food**, or use Quick add → food. **Manual**, **Search**, and **My foods** share a dialog. Close/Escape and reopen: drafts should persist. Focus should return to the launching control.
+- Manual: enter calories, expand nutrient fields, save, then verify totals and History. Unknown nutrient fields stay blank. Totals show macros first; **More nutrients and coverage** expands the rest.
+- Search: with `USDA_API_KEY` configured, choose a result and quantity. Review the populated Manual fields before saving. Without a key, expect a useful failure and a working Manual route.
+- My foods: select a saved portion, set quantity/date/time, save and verify scaled calories/nutrients. Close the dialog and open Foods: the original library logger should still work, with no duplicate IDs/forms. Test removal/collapse of its panel and dialog entry afterward.
+- Journal: use the section links below the date to open Water, Sleep, Check-in and Steps. Only the selected editor should expand. Change the date, save each type and review the timeline. Hidden/collapsed layout panels should reopen through these links; Quick add should still focus the relevant field.
+
+### Acceptance and known limits
+
+Record desktop and phone width/browser, both themes, keyboard/touch behavior and any horizontal overflow. Time a repeated five-set workout and a saved-food entry; record taps and corrections as well as scrolling. No before/after speed improvement has yet been measured.
+
+Automated checks: 29 Python storage/request-handler tests, JS syntax checks, and set-save, voice and workspace-save behavior suites passed. The request-handler tests exercise routes in process; they do not replace transport/browser testing. Six network HTTP tests cannot connect here because of WinError 10013. Visual, microphone, real-phone and live food-lookup validation remain pending. Optional covers/media, arbitrary nested live-form composition, persistent trash, hosted auth, closed-app reminders and the body mesh are not completed by this increment.
+
+## 20 November: drag-to-arrange Overview walkthrough
+
+Use the disposable demo database from `markdowns/DEMO_DATABASE.md` or a separate empty test account. Sign in and open **Overview**. Choose **Customize page**. The six original panels are Sets logged, Days with records, Pick up where you left off, Quick start, Your workspace, and Your pages. The first two are numbers, not fitness records you can edit here.
+
+1. On desktop, grab the dotted grip on **Quick start** and drag over the upper half of **Sets logged**. A line should appear above that target; release to place Quick start first. Drag over the lower half of another panel to insert after it. The controls should remain functional: click Quick add, open a page link, and navigate back.
+2. Change **Page columns** to One column and then Two columns. Use **Full width** / **Half width** to make a panel span both columns or one; workspace and pages start full width. At a narrow width, panels should stack in the same saved order. Click **Done customizing**, reload, and confirm placement, width and column choice survive. Undo layout (top save bar) should restore the preceding arrangement.
+3. Choose **Customize page** again. Collapse a panel, then expand it; remove one, then restore it with **Restore hidden panel**. Check that its underlying records did not disappear. Choose **Add record view** to add recent sets or meals; save a new record and check that the panel updates. Use **Reset layout** to restore all six defaults and two columns (after confirming the prompt).
+4. With a phone or touch emulator, drag the grip onto another panel and watch for the line. Try normal scrolling from outside the grip, then use **Move up** and **Move down** with touch and a keyboard. With a keyboard, Tab to the buttons and press Enter; no drag action is required. Check dark and light themes and ensure no horizontal overflow.
+5. On a custom page choose **Customize blocks**. Drag a block onto the upper or lower portion of a sibling for a line before or after; drop onto the middle of a section to nest it (Shift while dropping on a section also nests). Move a selected parent/child group, attempt an invalid self/descendant drop, then reload. Invalid moves should save nothing; saved fitness records should be unaffected. Use Move up/down and Move selected for keyboard/touch fallback.
+6. Export the workspace, restore it into a separate empty database, and check Overview order, visibility and columns alongside the existing page/block layouts. Do this only with disposable records.
+
+These steps are a manual review request, not evidence of a completed browser or real-phone test. The hosted Vercel page still serves the separate static preview.

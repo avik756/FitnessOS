@@ -21,7 +21,8 @@
         const sibling = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
         if (!sibling?.classList.contains('nav-item')) return;
         if (direction < 0) sibling.before(row); else sibling.after(row);
-        write(navKey, [...nav.querySelectorAll('[data-nav]')].map(a => a.dataset.nav));
+        const order=[...nav.querySelectorAll('[data-nav]')].map(a => a.dataset.nav);write(navKey,order);
+        if(window.fitnessWorkspace){window.fitnessWorkspace.state.navigation=order;window.fitnessWorkspace.persist();}
       }; row.append(button);
     }
   }
@@ -51,12 +52,24 @@
     write('fitnessos-appearance',values); Object.assign(document.documentElement.dataset,values);
     const workspaceControl = document.querySelector(field.id === 'settings-theme' ? '#workspace-theme' : '#workspace-font');
     if (workspaceControl && field.id !== 'settings-density') { workspaceControl.value=field.value; workspaceControl.dispatchEvent(new Event('change')); }
-    settings.querySelector('#settings-status').textContent='Preferences saved on this browser.';
+    if(window.fitnessWorkspace){window.fitnessWorkspace.state.density=values.density;window.fitnessWorkspace.persist();}
+    settings.querySelector('#settings-status').textContent='Check the workspace save status above.';
   };
   settings.querySelector('#settings-arrange').onclick=()=>{location.hash='#home';toggle.click();toggle.focus();};
   function showSettings(){if(location.hash === '#settings') { settings.hidden=false; document.querySelectorAll('[data-view]:not(#view-settings)').forEach(view=>view.hidden=true); }}
   window.addEventListener('hashchange',showSettings);showSettings();
 
+  function syncPreferences(){
+    const workspace=window.fitnessWorkspace;if(!workspace)return;
+    const {state,persist}=workspace;let migrated=false;
+    if(!state.navigation){state.navigation=[...nav.querySelectorAll('[data-nav]')].map(a=>a.dataset.nav);migrated=true;}
+    if(!state.density){state.density=read('fitnessos-appearance',{}).density||'comfortable';migrated=true;}
+    for(const key of state.navigation){const row=[...nav.querySelectorAll('.nav-item')].find(n=>n.querySelector('[data-nav]').dataset.nav===key);if(row)nav.append(row);}
+    for(const key of ['theme','font','density']){const value=state[key]||document.documentElement.dataset[key];document.documentElement.dataset[key]=value;settings.querySelector(`#settings-${key}`).value=value;}
+    write('fitnessos-appearance',{theme:state.theme,font:state.font,density:state.density});
+    if(migrated)persist();
+  }
+  window.addEventListener('workspace-ready',syncPreferences);window.addEventListener('workspace-reset',syncPreferences);
   const reminders = document.createElement('section'); reminders.dataset.view='reminders'; reminders.className='view'; reminders.hidden=true;
   reminders.innerHTML='<div class="page-heading"><span class="eyebrow">Your schedule</span><h1>Reminders</h1><p>Alerts work while this local app is open. Your browser may pause them in the background.</p></div><div class="two-column"><section class="card"><h2>New reminder</h2><form id="reminder-form"><label>Message<input name="message" required maxlength="120" placeholder="Drink water"></label><label>Time<input name="time" type="time" required></label><label>Days<select name="days"><option value="daily">Every day</option><option value="weekdays">Weekdays</option><option value="weekends">Weekends</option></select></label><label>Vibration<select name="vibration"><option value="off">Off</option><option value="short">Short</option><option value="double">Double</option></select></label><button class="primary-button">Save reminder</button><p id="reminder-status" class="status" role="status"></p></form><button id="test-vibration" type="button" class="text-button">Test vibration</button></section><section class="card"><h2>Your reminders</h2><ul id="reminder-list" class="compact-list"></ul></section></div>';
   document.querySelector('main.page').append(reminders);
