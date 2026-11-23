@@ -2,5 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "buildCommand": null,
-  "outputDirectory": "public"
+  "outputDirectory": null,
+  "functions": {"api/index.py": {"includeFiles": "{frontend/**,backend/supabase-ca.crt}", "maxDuration": 60}},
+  "rewrites": [{"source": "/(.*)", "destination": "/api/index"}]
 }

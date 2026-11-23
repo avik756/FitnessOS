@@ -3,6 +3,6 @@
   "framework": null,
   "buildCommand": null,
   "outputDirectory": null,
-  "functions": {"api/index.py": {"includeFiles": "frontend/**", "maxDuration": 60}},
+  "functions": {"api/index.py": {"includeFiles": "{frontend/**,backend/supabase-ca.crt}", "maxDuration": 60}},
   "rewrites": [{"source": "/(.*)", "destination": "/api/index"}]
 }

@@ -156,3 +156,11 @@ This file records semi-important and larger product changes, architecture choice
 
 Created a Mumbai free-tier Supabase project and applied owner-scoped PostgreSQL schema with forced RLS across 13 private tables. Prepared Python hosted transport and PostgreSQL adapter, private email-link sign-in limited to the approved email, and hosted UI copy; hosted photo routes and photo backups are denied until a secure unlock/storage flow exists. The active Vercel deployment remains the static preview because automated review rejected sending the new database login to Vercel. Ten hosted boundary tests and privileged rollback-only SQL checks pass; restricted-role, actual hosting and real phone acceptance are pending. The local SQLite app and its uncommitted work remain in place. See `markdowns/HOSTED_HANDOFF.md` for exact gates.
 
+# 23 November 2026 - hosted database certificate setup
+
+After Avik's restricted-role test reached the Supabase pooler but failed TLS certificate verification, changed the PostgreSQL adapter to require the project CA certificate at `backend/supabase-ca.crt` while retaining `verify-full`, and included that file in the candidate Vercel function bundle. Copied the dashboard-downloaded public Supabase Root 2021 CA certificate into the working tree and parsed it locally. Restricted-role and hosted deployment checks remain pending.
+
+On the laptop, two restricted-role integration tests passed; a forged-owner insert in the third returned a generic operational error, likely because RLS permission denials were not mapped to SQLite integrity errors. Map only PostgreSQL `InsufficientPrivilege` to SQLite integrity error and check that neither account received the forged favorite. All three live tests need rerunning.
+
+Avik reran the three restricted-role integration tests with the updated adapter; all passed. Hosted Vercel and phone acceptance remain pending.
+

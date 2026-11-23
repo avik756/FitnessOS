@@ -42,6 +42,8 @@ class PostgresIntegrationTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             with closing(self.b.connect()) as connection, connection:
                 connection.execute('INSERT INTO favorites (user_id,exercise) VALUES (?,?)',(self.a.user_id,'Forged'))
+        self.assertNotIn('Forged', app.list_favorites(self.a))
+        self.assertNotIn('Forged', app.list_favorites(self.b))
         app.save_set(self.payload,self.b,'same-request-123456')
         self.assertEqual(len(app.list_sets(self.b)),1)
         with self.assertRaises(ValueError):

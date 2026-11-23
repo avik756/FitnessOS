@@ -8,6 +8,10 @@ import re
 import sqlite3
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
+
+
+SUPABASE_CA = Path(__file__).with_name('supabase-ca.crt')
 
 
 @dataclass(frozen=True)
@@ -90,13 +94,17 @@ def translate(query):
 class Connection:
     def __init__(self, dsn, user_id):
         import psycopg
+        if not SUPABASE_CA.is_file():
+            raise sqlite3.OperationalError(
+                'Supabase CA certificate missing at backend/supabase-ca.crt. '
+                'Download it from the project Database Settings before connecting.')
         self.driver = psycopg
         self.owner = user_id
         self.locked = False
         self.raw = None
         try:
             self.raw = psycopg.connect(dsn, connect_timeout=10, prepare_threshold=None,
-                                      sslmode='verify-full', sslrootcert='system')
+                                      sslmode='verify-full', sslrootcert=str(SUPABASE_CA))
             role = self.raw.execute('SELECT current_user, rolbypassrls, rolsuper FROM pg_roles WHERE rolname=current_user').fetchone()
             if role != ('fitnessos_app', False, False):
                 raise sqlite3.OperationalError('Hosted storage requires the restricted fitnessos_app role.')
@@ -116,6 +124,10 @@ class Connection:
         try:
             return Cursor(self.raw.execute(sql, values or None), inserted)
         except self.driver.IntegrityError:
+            raise sqlite3.IntegrityError('The record conflicts with existing data or ownership rules.') from None
+        except self.driver.errors.InsufficientPrivilege:
+            # RLS rejects a row with another owner using SQLSTATE 42501, not a
+            # PostgreSQL constraint error. Preserve the SQLite-side denial contract.
             raise sqlite3.IntegrityError('The record conflicts with existing data or ownership rules.') from None
         except self.driver.Error:
             raise sqlite3.OperationalError('Hosted database operation failed.') from None
